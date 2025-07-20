@@ -36,3 +36,7 @@ dotfile.conf
 *.link
 #####################################
 
+### lazyvim
+lazy-lock.json
+lazyvim.json
+
