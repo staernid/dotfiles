@@ -1,22 +1,35 @@
 #workspace sunshine output HEADLESS-1 HEADLESS-2 HEADLESS-3 HEADLESS-4
 # Menus, etc.
 for_window [app_id="simplemenu"] {
-	floating enable
-        resize set 800 330
-	move position 350 720
+  floating enable
+  resize set 800 330
+  move position 350 720
 }
 
 for_window [app_id="translator"] {
-        floating enable
-        resize set 800 330
-        move position 350 720
+  floating enable
+  resize set 800 330
+  move position 350 720
 }
 
 for_window [class="webcam"] {
-        floating enable
-        resize set 768 432
-        move position 1150 620
+  floating enable
+  resize set 768 432
+  move position 1150 620
 }
+
+for_window [app_id="vdu_controls"] {
+  floating enable
+  resize set 768 432
+  move position 30 100
+}
+for_window [app_id="com.github.hluk.copyq"] {
+  floating enable
+  resize set 768 432
+  move position 30 100
+}
+
+
 
 # Media
 #assign [app_id="mplayer"] workspace 10 
@@ -27,6 +40,6 @@ for_window [class="webcam"] {
 
 # Phone screen stream
 for_window [app_id="scrcpy"] {
-	floating enable
-        resize set 488 1000
+  floating enable
+    resize set 488 1000
 }

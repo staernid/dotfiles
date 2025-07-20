@@ -35,7 +35,7 @@ bindsym --release $mod+q kill
 
 #Wallpaper changers
 bindsym --release $mod+d exec $scriptdir/menu bash -e $HOME/.scripts/change_background
-bindsym --release $mod+Shift+d exec $HOME/.scripts/change_background_imv
+#bindsym --release $mod+Shift+d exec $HOME/.scripts/change_background_imv
 
 # Drag floating windows by holding down $mod and left mouse button.
 # Resize them with right mouse button + $mod.
@@ -49,19 +49,19 @@ floating_modifier $mod normal
 #bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -b 'Yes, exit sway' 'swaymsg exit'
 
 ####### Start your launcher
-# for zsh (and maybe Korn?)
-set $launcher wofi --show run
 # for bash
-# set $launcher "compgen -c | sort -u | fzf | xargs -r swaymsg -t command exec"
-bindsym --release $mod+x exec $launcher
+bindsym $mod+x nop
+bindsym --release $mod+x exec $menu
 
-bindsym --release $mod+tab exec $menu -e zsh
 # Also quick "launcher" key combos for apps (and their classic counterparts):
 # Browser
 bindsym --release $mod+i exec $browser 
 bindsym --release $mod+p exec $browser --private
 
 bindsym --release $mod+b exec rofi-rbw
+
+# Screenshots:
+bindsym --release $mod+shift+p exec grim -g "$(slurp -d)" - | wl-copy -t image/png
 
 # Music player controller:
 #bindsym $mod+0 exec "$term --class mplayer -T mplayer -e ncmpcp
@@ -83,9 +83,9 @@ bindsym Shift+XF86MonBrightnessDown exec 'brightnessctl set 0'
 #bindsym XF86AudioNext exec "mpc next"
 #bindsym $mod+Right exec "mpc next"
 
-bindsym $mod+Down exec "playerctl play-pause"
-bindsym $mod+Left exec "playerctl previous"
-bindsym $mod+Right exec "playerctl next"
+bindsym $mod+Shift+Slash exec "playerctl play-pause"
+bindsym $mod+Shift+Comma exec "playerctl previous"
+bindsym $mod+Shift+Period exec "playerctl next"
 
 # Audio Control:
 bindsym XF86AudioMicMute exec "pulsemixer --id source-1 --toggle-mute"
@@ -94,8 +94,8 @@ bindsym XF86AudioLowerVolume exec "pulsemixer --change-volume -3 && pulsemixer -
 bindsym XF86AudioRaiseVolume exec "pulsemixer --change-volume +3 && pulsemixer --max-volume 120"
 bindsym $mod+Comma exec "pulsemixer --change-volume -3 && pulsemixer --max-volume 120"
 bindsym $mod+Period exec "pulsemixer --change-volume +3 && pulsemixer --max-volume 120"
- bindsym $mod+Shift+b pactl set-card-profile bluez_card.0C_8D_CA_DB_C3_29 a2dp-sink-aac
- bindsym $mod+Shift+v pactl set-card-profile bluez_card.0C_8D_CA_DB_C3_29 handsfree_head_unit
+bindsym $mod+Shift+b pactl set-card-profile bluez_card.0C_8D_CA_DB_C3_29 a2dp-sink-aac
+bindsym $mod+Shift+v pactl set-card-profile bluez_card.0C_8D_CA_DB_C3_29 handsfree_head_unit
 # Misc
 #bindsym XF86Search exec 'firefox --new-tab "googl.com/#q=$(xclip -out -selection primary)"'
 bindsym XF86Search exec 'firefox --new-tab "$(wl-paste --primary)"'
@@ -195,7 +195,8 @@ bindsym $mod+tab floating toggle
 # Swap focus between the tiling area and the floating area
 bindsym $mod+Shift+tab focus mode_toggle
 
-bindsym $mod+z sticky toggle
+bindsym $mod+Shift+z sticky toggle
+bindsym $mod+z exec 'sudo usbreset "Cooler Master Mice Dongle"'
 
 # Move focus to the parent container
 #bindsym $mod+a focus parent
@@ -236,9 +237,6 @@ mode "resize" {
 }
 bindsym $mod+r mode "resize"
 
-bindsym $mod+Shift+p exec grim -g "$(slurp -d)" - | wl-copy -t "image/png"
-bindsym $mod+Shift+c exec grim -g "$(slurp)" - | tesseract - - | wl-copy
-bindsym $mod+Shift+x exec grim -g "$(slurp)" - | tesseract - - | calc -p | wl-copy
 
 #bindsym XF86Explorer exec $HOME/.scripts/switch
 #bindsym $mod+Escape exec $HOME/.scripts/switch

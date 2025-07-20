@@ -1,0 +1,10 @@
+0000000000000000000000000000000000000000 888600e7ff4b0d8be0db18db932632830bfb7804 vitezfh <vitezfh@gmail.com> 1673541764 +0100	clone: from https://github.com/LazyVim/starter
+888600e7ff4b0d8be0db18db932632830bfb7804 c5978d7e8c047390ec51a7bba78cdd9180954c71 vitezfh <stjepan@vitez.xyz> 1683559151 +0200	pull: Fast-forward
+c5978d7e8c047390ec51a7bba78cdd9180954c71 92b2689e6f11004e65376e84912e61b9e6c58827 vitezfh <stjepan@vitez.xyz> 1702587875 +0100	pull: Fast-forward
+92b2689e6f11004e65376e84912e61b9e6c58827 bb39ae927a1b56a56136a6942ffa0e8817222cb6 vitezfh (aider) <stjepan@vitez.xyz> 1729547667 +0200	commit: feat: add cmp-ai and nvim-cmp plugins
+bb39ae927a1b56a56136a6942ffa0e8817222cb6 2e04e71afe0f19e4fda480d80ff8b1afa381ddc2 vitezfh (aider) <stjepan@vitez.xyz> 1729547678 +0200	commit: refactor: remove unused setup
+2e04e71afe0f19e4fda480d80ff8b1afa381ddc2 2e04e71afe0f19e4fda480d80ff8b1afa381ddc2 vitezfh <stjepan@vitez.xyz> 1740584657 +0100	reset: moving to HEAD
+2e04e71afe0f19e4fda480d80ff8b1afa381ddc2 2768e117e1dcde74cbe0c1f6c7feb9497170c587 vitezfh <stjepan@vitez.xyz> 1740584706 +0100	revert: Revert "docs: simplify cmp-emoji example"
+2768e117e1dcde74cbe0c1f6c7feb9497170c587 2768e117e1dcde74cbe0c1f6c7feb9497170c587 vitezfh <stjepan@vitez.xyz> 1740584721 +0100	checkout: moving from main to main
+2768e117e1dcde74cbe0c1f6c7feb9497170c587 2768e117e1dcde74cbe0c1f6c7feb9497170c587 vitezfh <stjepan@vitez.xyz> 1740584775 +0100	checkout: moving from main to main
+2768e117e1dcde74cbe0c1f6c7feb9497170c587 803bc181d7c0d6d5eeba9274d9be49b287294d99 vitezfh <stjepan@vitez.xyz> 1740584780 +0100	reset: moving to origin/main

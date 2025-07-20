@@ -14,7 +14,7 @@ setopt HIST_SAVE_NO_DUPS
 setopt HIST_BEEP
 
 
-PATH="$HOME/.scripts:$HOME/.local/bin:$PATH:$HOME/.cargo/bin"
+PATH="$HOME/.scripts:$HOME/.bin:$HOME/.local/bin:$PATH:$HOME/.cargo/bin:$HOME/go/bin"
 export PATH
 autoload -U promptinit; promptinit
 
@@ -26,6 +26,7 @@ PS1="%B%{$fg[red]%}[%{$fg[yellow]%}%n%{$fg[green]%}@%{$fg[blue]%}%M %{$fg[magent
 # Load aliases and shortcuts if existent.
 [ -f "$HOME/.config/shortcutrc" ] && source "$HOME/.config/shortcutrc"
 [ -f "$HOME/.config/aliasrc" ]	  && source "$HOME/.config/aliasrc"
+[ -f "$HOME/.bin/_utilrc" ]       && source "$HOME/.bin/_utilrc"
 
 autoload -Uz compinit
 zstyle ':completion:*' menu select
@@ -55,29 +56,30 @@ if [ -f '/home/vitezfh/.local/share/google-cloud-sdk/path.zsh.inc' ]; then . '/h
 if [ -f '/home/vitezfh/.local/share/google-cloud-sdk/completion.zsh.inc' ]; then . '/home/vitezfh/.local/share/google-cloud-sdk/completion.zsh.inc'; fi
 
 # FZF
-#[ -f /usr/share/fzf/completion.zsh ] && source /usr/share/fzf/completion.zsh
-#[ -f /usr/share/fzf/key-bindings.zsh ] && source /usr/share/fzf/key-bindings.zsh
+[ -f /usr/share/fzf/completion.zsh ] && source /usr/share/fzf/completion.zsh
+[ -f /usr/share/fzf/key-bindings.zsh ] && source /usr/share/fzf/key-bindings.zsh
 #[ -f $HOME/git/fzf/shell/completion.zsh ] && source $HOME/git/fzf/shell/completion.zsh 
 #[ -f $HOME/git/fzf/shell/key-bindings.zsh ] && source $HOME/git/fzf/shell/key-bindings.zsh 
+#[ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh 
+#[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh 
+#[ -f /usr/local/bin/helm ] && source <(helm completion zsh)
 
 # SKIM
-[ -f /usr/share/skim/completion.zsh ] && source /usr/share/skim/completion.zsh
-[ -f /usr/share/skim/key-bindings.zsh ] && source /usr/share/skim/key-bindings.zsh
+#[ -f /usr/share/skim/completion.zsh ] && source /usr/share/skim/completion.zsh
+#[ -f /usr/share/skim/key-bindings.zsh ] && source /usr/share/skim/key-bindings.zsh
 
 # source <(cod init $$ zsh)
 
 # Load zsh-syntax-highlighting; should be last.
-source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh 2>/dev/null
-#moon
-#neofetch --size '300' # --colors 15 7 7 15 7 7 --ascii_colors 5 13 2 5 2 2
 #pfetch
-export TERM=xterm-256color
- # autologin on tty1
-#if [ -z "$DISPLAY" ] && [ "$(fgconsole)" -eq 1 ] && [ "$HOSTNAME" -eq "hex" ] ; then
-#  exec startx
-#fi
+#export TERM=xterm-256color
 # source /home/vitezfh/.config/broot/launcher/bash/br
 
+export SSH_AUTH_SOCK=$HOME/.bitwarden-ssh-agent.sock
+
 export PYENV_ROOT="$HOME/.pyenv"
-command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init - zsh)"
+
+#[ -d $HOME/.scripts/.zsh_completion ] && source $HOME/.scripts/.zsh_completion/*
+source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh 2>/dev/null

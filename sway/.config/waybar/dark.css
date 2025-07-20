@@ -16,14 +16,14 @@ window#waybar {
 #idle_inhibitor,
 #clock,
 #cpu,
-#pulseaudio,
 #memory,
 #battery,
 #disk,
 #temperature,
-#custom-ddc,
 #tray {
 	background: #101010;
+  margin-top: 7px;
+  margin-bottom: 7px;
 }
 
 #workspaces button {
@@ -42,6 +42,7 @@ window#waybar {
 	color: #000000;
 }
 
+
 #idle_inhibitor {
 	color: #ac71b4;
 }
@@ -50,7 +51,7 @@ window#waybar {
 	color: #6c71c4;
 }
 #pulseaudio {
-	color: #268bd2;
+	color: #ffffff;
 }
 #memory {
 	color: #2aa198;
@@ -66,11 +67,31 @@ window#waybar {
 }
 #clock {
 	margin: 0 0px;
-	padding: 0 18px;
+	padding: 0 1px;
 }
+
+#pulseaudio-slider slider {
+    min-height: 0px;
+    min-width: 0px;
+    opacity: 0;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+}
+#pulseaudio-slider trough {
+    min-height: 120px;
+    min-width: 10px;
+    border-radius: 5px;
+    background-color: #111111;
+}
+#pulseaudio-slider highlight {
+    min-width: 10px;
+    border-radius: 5px;
+    background-color: #d77bba;
+}
+
 #idle_inhibitor,
 #cpu,
-#pulseaudio,
 #memory,
 #battery,
 #disk,

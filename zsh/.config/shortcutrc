@@ -11,7 +11,9 @@ update_yt_dlp() {
 colorize_icon () { 
 	convert "$2" -fill "$1" -colorize 100 "$1-$2"
 }
-
+twitch_watch () {
+    streamlink --player mpv "$@" source
+}
 shellfix () {
 	shellcheck -f diff "$@" | patch "$@"
 }

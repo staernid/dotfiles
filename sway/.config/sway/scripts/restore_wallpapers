@@ -1,7 +1,0 @@
-#!/bin/sh
-
-for image in ~/.cache/wallpapers/*
-do
-	echo $image
-	swaymsg output $(basename $image) bg $image fill
-done

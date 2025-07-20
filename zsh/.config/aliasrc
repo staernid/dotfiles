@@ -1,6 +1,10 @@
 #!/bin/sh
 
+alias logout="[[ -o login ]] && logout || qdbus org.kde.ksmserver /KSMServer logout 0 0 1"
+
 alias ed="$EDITOR"
+
+alias dedit="chezmoi edit --apply"
 
 alias sunshine_flatpak="flatpak run --filesystem=home --socket=wayland dev.lizardbyte.sunshine"
 
@@ -16,16 +20,16 @@ alias adog='git log --all --decorate --oneline --graph'
 ###########
 #### VOID
 alias \
-	xi="sudo xbps-install -S" \
-	xr="sudo xbps-remove -R" \
-	xq="xbps-query -R" \
-	xs="xbps-query -Rs"
+  xi="sudo xbps-install -S" \
+  xr="sudo xbps-remove -R" \
+  xq="xbps-query -R" \
+  xs="xbps-query -Rs"
 alias ssv="sudo sv"
 ###########
 alias \
-	pacsyu="sudo pacman -Syu" \
-	pacss="sudo pacman -Ss" \
-	pacre="sudo pacman -R"
+  pacsyu="sudo pacman -Syu" \
+  pacss="sudo pacman -Ss" \
+  pacre="sudo pacman -R"
 
 alias gcm="git commit -m"
 
@@ -38,8 +42,9 @@ alias wf-cutout='$(wf-recorder -g "$(slurp)")'
 alias pomodoro='sleep 25m && paplay wow.wav & notify-send "Time is up!"'
 alias ytd="yt-dlp --add-metadata -i --default-search 'ytsearch' "
 alias ytda="yt-dlp --default-search 'ytsearch' -i -x -f bestaudio/best"
-alias ytv="youtube-viewer"
-alias ytva="youtube-viewer -n"
+alias yt-dlp-whatsapp="yt-dlp -f 'bestvideo[height<=1080]+bestaudio/best' --recode-video mp4"
+#alias ytv="youtube-viewer"
+#alias ytva="youtube-viewer -n"
 alias ffmpeg="ffmpeg -hide_banner"
 alias lolcat="lolcat -l"
 alias maxlight='lamp brightness 100 && lamp temperature 3900'
@@ -51,33 +56,33 @@ alias dimlight='lamp brightness 0 && lamp temperature 1700'
 
 #Verbosity and settings that you pretty much just always are going to want.
 alias \
-	bat="cat /sys/class/power_supply/BAT?/capacity" \
-	cp="cp -iv" \
-	mv="mv -iv" \
-	rm="rm -v" \
-	mkd="mkdir -pv" \
-	lsdla="lsd -la"
+  bat="cat /sys/class/power_supply/BAT?/capacity" \
+  cp="cp -iv" \
+  mv="mv -iv" \
+  rm="rm -v" \
+  mkd="mkdir -pv" \
+  lsdla="lsd -la"
 # Colorize commands when possible.
 alias \
-	ls="ls -hN --color=auto --group-directories-first" \
-	grep="grep --color=auto" \
-	diff="diff --color=auto" \
-	ccat="highlight --out-format=ansi"
+  ls="ls -hN --color=auto --group-directories-first" \
+  grep="grep --color=auto" \
+  diff="diff --color=auto" \
+  ccat="highlight --out-format=ansi"
 
 # These common commands are just too long! Abbreviate them.
 alias \
-	ka="killall" \
-	g="git" \
-	trem="transmission-remote" \
-	sd="sudo shutdown" \
-	f="$FILE" \
-	e="$EDITOR" \
-	v="$EDITOR" \
-	bright="brightnessctl set" \
-	svenv="source venv/bin/activate" \
-	cx='chmod +x' \
-	..='cd ..' \
-	myp='ps -fjH -u $USER'
+  ka="killall" \
+  g="git" \
+  trem="transmission-remote" \
+  sd="sudo shutdown" \
+  f="$FILE" \
+  e="$EDITOR" \
+  v="$EDITOR" \
+  bright="brightnessctl set" \
+  svenv="source venv/bin/activate" \
+  cx='chmod +x' \
+  ..='cd ..' \
+  myp='ps -fjH -u $USER'
 
 # This alias is important. It enables the `pauseallmpv` command.
 alias mpv="mpv --input-ipc-server=/tmp/mpvsoc$(date +%s)"

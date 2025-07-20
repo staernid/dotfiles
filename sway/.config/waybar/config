@@ -1,54 +1,98 @@
 // vim:ft=json
 
 [{
-    "layer": "top",
-    "name": "side2",
-    "output": [
-      "DP-1",
-      "HDMI-A-1",
-      "DP-2"
-    ],
-    "position": "left",
-    "modules-left": [
-      "wlr/workspaces"
-    ],
-    "wlr/workspaces": {
-      "disable-scroll": true,
-      "format": "{name}"
-    }
-  },
+  "layer": "top",
+  "name": "side2",
+  "width": 28,
+  "output": [
+    "HDMI-A-1",
+    "eDP-1"
+  ],
+  "position": "left",
+  "modules-left": [
+    "sway/workspaces"
+  ],
+  "sway/workspaces": {
+    "disable-scroll": true,
+    "format": "{name}"
+  }
+},
   {
     "layer": "top",
     "name": "side1",
-    "output": "DP-1",
-    "position": "right",
+    "output": ["DP-3","DP-1"],
+    "position": "left",
     "modules-left": [
-      "wlr/workspaces"
+      "sway/workspaces",
+      "tray"
+    ],
+    "modules-center": [
+      "clock"
     ],
     "modules-right": [
-      "custom/rofi",
-      "custom/yee",
-      "custom/ddc"
-    ], 
+      "pulseaudio",
+      "pulseaudio/slider",
+      "custom/ddcbright",
+      "custom/ddccont"
+    ],
+    "tray": {
+      "icon-size": 21,
+      "spacing": 7
+    },
+    "pulseaudio": {
+      "format": "{icon}",
+      "format-bluetooth": "{icon}",
+      "format-muted": "󰝟",
+      "format-icons": {
+            "alsa_output.pci-0000_00_1f.3.analog-stereo": "🔈",
+            "headphones": "🎧",
+            "handsfree": "󰠂",
+            "headset": "󰋎",
+            "phone": "󰏲",
+            "portable": "󰙙",
+            "car": "🚗",
+            "default": ["", ""]
+      },
+      "scroll-step": 1,
+      "on-click": "pavucontrol"
+    },
+    "pulseaudio/slider": {
+      "min": 0,
+      "max": 100,
+      "orientation": "vertical"
+    },
+    "clock": {
+      "interval": 60,
+      "tooltip": true,
+      "format": "{:%H\n%M}",
+      "tooltip-format": "{:%Y-%m-%d}",
+    },
     "gamemode": {
-    "format": "{glyph}",
-    "format‐alt": "{glyph} {count}",
-    "glyph": "<U+F7B3>",
-    "hide‐not‐running": true,
-    "use‐icon": true,
-    "icon‐name": "input‐gaming‐symbolic",
-    "icon‐spacing": 4,
-    "icon‐size": 20,
-    "tooltip": true,
-    "tooltip‐format": "Games running: {count}"
+      "format": "{glyph}",
+      "format‐alt": "{glyph} {count}",
+      "glyph": "<U+F7B3>",
+      "hide‐not‐running": true,
+      "use‐icon": true,
+      "icon‐name": "input‐gaming‐symbolic",
+      "icon‐spacing": 4,
+      "icon‐size": 20,
+      "tooltip": true,
+      "tooltip‐format": "Games running: {count}"
     },
     "memory": {
-    "interval": 30,
-    "format": "{used:0.1f}G/{total:0.1f}G <U+F0C9>"
+      "interval": 30,
+      "format": "{used:0.1f}G/{total:0.1f}G <U+F0C9>"
     },
-    "wlr/workspaces": {
+    "sway/workspaces": {
       "disable-scroll": true,
       "format": "{name}"
+    },
+    "custom/tuya": {
+      "format": "{}",
+      "exec": "mosquitto_sub -h x2sixty -t 'zigbee2mqtt/tuya_plug_0' | jq '.power' --unbuffered",
+      "exec-if": "exit 0",
+      "restart-interval": 60,
+      "escape": true,
     },
     "custom/rofi": {
       "format": "🚀",
@@ -56,11 +100,27 @@
     },
     "custom/yee": {
       "format": "🔮",
-      "on-click": "./.config/waybar/yee.sh"
+      "on-click": "./.config/waybar/scripts/yee.sh"
     },
-    "custom/ddc": {
-      "format": "☀️",
-      "on-click": "./.config/waybar/ddc.sh"
-    }
+    "custom/ddcbright": {
+        "exec": "ddcutil -b 13 getvcp 10 -t | perl -nE 'if (/ C (\\d+) /) { say $1; }'",
+        "exec-if": "sleep 0.5", // Give enough time for `sway output` command changes to propagate so we can read them in the next `exec`
+        "format": "☀️",
+        "tooltip": true,
+        "tooltip-format": "Brightness: {}% ☀️",
+        "interval": "once",
+        "on-scroll-up": "ddcutil -b 13 setvcp 10 + 10",
+        "on-scroll-down": "ddcutil -b 13 setvcp 10 - 10"
+    },
+    "custom/ddccont": {
+        "exec": "ddcutil -b 13 getvcp 12 -t | perl -nE 'if (/ C (\\d+) /) { say $1; }'",
+        "exec-if": "sleep 0.5", // Give enough time for `sway output` command changes to propagate so we can read them in the next `exec`
+        "format": "🌗",
+        "tooltip": true,
+        "tooltip-format": "Contrast: {}% 🌗",
+        "interval": "once",
+        "on-scroll-up": "ddcutil -b 13 setvcp 12 + 5",
+        "on-scroll-down": "ddcutil -b 13 setvcp 12 - 5"
+    },
   }
 ]

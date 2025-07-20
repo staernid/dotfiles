@@ -16,7 +16,7 @@ set $confdir $HOME/.config/sway
 set $scriptdir $HOME/.config/sway/scripts
 set $waybardir $XDG_CONFIG_HOME/waybar
 
-#xwayland disable
+xwayland enable
 ### VARIABLES
 #
 set $lock 'wlogout -p layer-shell -b 4'
@@ -66,21 +66,16 @@ set $browser firefox
 set $fzf fzf -i --cycle
 
 # Application launcher
-set $menu $scriptdir/menu
+set $menu fuzzel | xargs swaymsg exec -- 
 
 #exec mkfifo $SWAYSOCK.wob && tail -f $SWAYSOCK.wob | wob
 #exec pipewire
 #exec a2ln 6565
 #exec blueman-applet
 exec xrdb -load ~/.Xresources
-exec dbus-update-activation-environment --all
-exec copyq
+exec dbus-update-activation-environment --all --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP='sway;wlroots'
+#exec copyq
 exec swaync
-exec swayidle -w \
-      timeout 995 'notify-send Warning: Screen(s) turn off in 5 seconds...' \
-      timeout 1000 'swaymsg "output * dpms off"' \
-      timeout 2200 'systemctl suspend' \
-      resume 'swaymsg "output * dpms on"'
 
 #exec export $(gnome-keyring-daemon --replace --components=secrets)
 
