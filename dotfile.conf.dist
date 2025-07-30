@@ -1,5 +1,4 @@
 #!/bin/sh
 
-TO_DEPLOY="bspwm scripts media kitty editor ascii ssh sway zsh uni_desktop"
+TO_DEPLOY="arch editor kitty media shell ssh sway zsh"
 SWAY_THEME=dark
-
