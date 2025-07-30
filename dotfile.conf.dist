@@ -1,4 +1,4 @@
 #!/bin/sh
 
-TO_DEPLOY="arch editor kitty media shell ssh sway zsh"
+TO_DEPLOY="arch editor media shell ssh zsh"
 SWAY_THEME=dark
