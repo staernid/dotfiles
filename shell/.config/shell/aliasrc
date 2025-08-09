@@ -50,8 +50,18 @@ alias \
   trem="transmission-remote" \
   sdn="shutdown -h now" \
   e='$EDITOR' \
+  dd_generic="sudo dd bs=1M iflag=fullblock status=progress" \
   v='$EDITOR' \
-  p="pacman" \
+  pac="pacman" \
+  pacs="pacman -S" \
+  pacss="pacman -Ss" \
+  pacsyu="pacman -Syu" \
+  pacrns="pacman -Rns" \
+  pacqdtq="pacman -Qdtq" \
+  pac-asexplicit="pacman -D --asexplicit" \
+  pac-fzf="pacman -Qq | fzf --preview 'pacman -Qil {}' --layout=reverse --bind 'enter:execute(pacman -Qil {} | less)'" \
+  pac-unowned="(export LC_ALL=C.UTF-8; comm -13 <(pacman -Qlq | sed 's,/$,,' | sort) <(find /etc /usr /opt -path /usr/lib/modules -prune -o -print | sort))" \
+  pac-fromlist='pacman -S --needed $(comm -12 <(pacman -Slq | sort) <(sort pkglist.txt))' \
   xi="sudo xbps-install" \
   xr="sudo xbps-remove -R" \
   xq="xbps-query -R" \

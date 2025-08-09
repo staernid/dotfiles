@@ -21,6 +21,19 @@ hex2guid () {
   echo "{$(echo $@ | awk '{print substr($0,7,2) substr($0,5,2) substr($0,3,2) substr($0,1,2)"-"substr($0,11,2) substr($0,9,2)"-"substr($0,15,2) substr($0,13,2)"-"substr($0,17,4)"-"substr($0,21,12)}')}"
 }
 
+# Reverses the order of words in a given string.
+# Arguments:
+#   $@: Words to reverse.
+# Returns:
+#   The string with words in reverse order.
+reverse_word_order() {
+  local result=
+  for word in "$@"; do
+    result="$word $result"
+  done
+  echo "$result"
+}
+
 #gcm () {
 #	git commit -m "$@"
 #}
