@@ -4,9 +4,8 @@ random_alphanum_string() {
 void_news() {
 	curl -sS https://voidlinux.org/atom.xml | sfeed | sfeed_html > /tmp/void.html && chromium /tmp/void.html
 }
-update_yt_dlp() {
-	sudo wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp
-	sudo chmod a+rx /usr/local/bin/yt-dlp
+yt_dlp_song() {
+	yt-dlp --extract-audio --download-archive "$HOME/Music/archive.txt" -o "%(title)s.%(ext)s" --add-metadata "$@"
 }
 colorize_icon () { 
 	convert "$2" -fill "$1" -colorize 100 "$1-$2"
@@ -38,10 +37,9 @@ reverse_word_order() {
 #	git commit -m "$@"
 #}
 
-oc_tc_make_all() {
-	cd /home/vitezfh/git/oc-thinclient
-	source source.me
-	make-all
+function ytdlp_transcript_clean(){
+    yt-dlp --skip-download --write-subs --write-auto-subs --sub-lang en --sub-format ttml --convert-subs srt --output "transcript.%(ext)s" $1;
+    cat ./transcript.en.srt | sed '/^$/d' | grep -v '^[0-9]*$' | grep -v '\-->' | sed 's/<[^>]*>//g' | tr '\n' ' ' > output.txt;
 }
 
 launcher() {
@@ -68,3 +66,36 @@ function bat_ds4()
 {
 	for ds4 in $(upower -e | grep sony_controller); do upower -i $ds4 | grep percentage; done 
 }
+
+
+# killport: Kill the process running on the specified port
+killport() {
+    local port=$1
+    if [ -z "$port" ]; then
+        echo "Error: Please provide a port number"
+        return 1
+    fi
+
+    # Get process ID(s) for the port
+    local pids
+    pids=$(lsof -t -i:$port 2>/dev/null)
+    local lsof_status=$?
+
+    if [ $lsof_status -ne 0 ] || [ -z "$pids" ]; then
+        echo "No process found on port $port"
+        return 1
+    fi
+
+    # Kill the process(es)
+    kill -9 $pids 2>/dev/null
+    local kill_status=$?
+
+    if [ $kill_status -eq 0 ]; then
+        echo "Process on port $port has been killed"
+    else
+        echo "Failed to kill process on port $port"
+        return 1
+    fi
+}
+
+

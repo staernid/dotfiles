@@ -4,8 +4,8 @@ set -xe
 
 mkdir -p scripts
 
-echo Cloning git@github.com:vitezfh/.scripts.git to ~/.scripts ...
-git clone git@github.com:vitezfh/.scripts.git "$HOME"/.scripts 2>/dev/null || true
+echo Cloning git@github.com:staernid/.scripts.git to ~/.scripts ...
+git clone git@github.com:staernid/.scripts.git "$HOME"/.scripts 2>/dev/null || true
 
 echo Checking if dotfile-config present ...
 [ -f dotfile.conf ] ||

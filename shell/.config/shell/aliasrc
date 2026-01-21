@@ -19,6 +19,9 @@ se() {
   [ -f "$HOME/.local/bin/$choice" ] && $EDITOR "$HOME/.local/bin/$choice"
 }
 
+alias \
+  \q="zsh-ai"
+
 # Verbosity and settings that you pretty much just always are going to want.
 alias \
   cp="cp -iv" \
@@ -67,7 +70,7 @@ alias \
   xq="xbps-query -R" \
   xs="xbps-query -Rs" \
   z="zathura" \
-  svenv="source venv/bin/activate" \
+  svenv="source .venv/bin/activate" \
   cx='chmod +x' \
   myp='ps -fjH -u $USER'
 
@@ -77,6 +80,16 @@ alias \
 # Wayland / SwayWM specific settings
 alias wf-cutout='$(wf-recorder -g "$(slurp)")'
 alias logout="[[ -o login ]] && logout || qdbus org.kde.ksmserver /KSMServer logout 0 0 1"
+
+# Kubectl
+alias kubens="kubectl ns"
+alias kubectx="kubectl ctx"
+alias kns="kubectl ns"
+alias kcx="kubectl ctx"
+
+# Gcloud
+alias gcal="gcloud auth login"
+alias gcaal="gcloud auth application-default login"
 
 alias \
   lf="lfub" \

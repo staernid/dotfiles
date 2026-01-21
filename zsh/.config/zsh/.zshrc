@@ -1,5 +1,5 @@
-HISTSIZE=100000
-SAVEHIST=100000
+HISTSIZE=1000
+SAVEHIST=1000
 HISTFILE=~/.cache/zsh_history
 export LS_COLORS="$(vivid generate molokai)"
 autoload -U colors && colors
@@ -7,6 +7,7 @@ PS1="%B%{$fg[red]%}[%{$fg[yellow]%}%n%{$fg[green]%}@%{$fg[blue]%}%M %{$fg[magent
 # Autumn Theme
 #PS1="%B%{$fg[yellow]%}[%{$fg[white]%}%n%{$fg[red]%}@%{$fg[yellow]%}%M %{$fg[white]%}%~%{$fg[yellow]%}]%{$reset_color%}$%b "
 
+###
 setopt HIST_EXPIRE_DUPS_FIRST
 setopt HIST_IGNORE_DUPS
 setopt HIST_IGNORE_ALL_DUPS
@@ -15,10 +16,8 @@ setopt HIST_FIND_NO_DUPS
 setopt HIST_SAVE_NO_DUPS
 setopt HIST_BEEP
 
-PATH="$HOME/.scripts:$HOME/.bin:$HOME/.local/bin:$PATH:$HOME/.cargo/bin:$HOME/go/bin"
-export PATH
+PATH="$HOME/.scripts:$PATH:$HOME/.cargo/bin:$GOPATH/bin"
 
-# Load aliases and shortcuts if existent.
 # Load aliases and shortcuts if existent.
 [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutrc" ]    && source "${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutrc"
 [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutenvrc" ] && source "${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutenvrc"
@@ -90,6 +89,9 @@ bindkey -M visual '^[[P' vi-delete
 [ -f /usr/share/fzf/completion.zsh ] && source /usr/share/fzf/completion.zsh
 [ -f /usr/share/fzf/key-bindings.zsh ] && source /usr/share/fzf/key-bindings.zsh
 
+
+[ -f ~/.cache/zsh_modules/zsh-ai/zsh-ai.plugin.zsh ] && source ~/.cache/zsh_modules/zsh-ai/zsh-ai.plugin.zsh
+
 export SSH_AUTH_SOCK=$HOME/.bitwarden-ssh-agent.sock
 
 export PYENV_ROOT="$HOME/.pyenv"
@@ -98,3 +100,4 @@ eval "$(pyenv init - zsh)"
 
 source /usr/share/zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh 2>/dev/null
 #source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh 2>/dev/null
+fastfetch

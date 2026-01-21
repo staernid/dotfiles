@@ -62,8 +62,15 @@ export MOZ_ENABLE_WAYLAND=1
 export VIRSH_DEFAULT_CONNE
 #export AWT_TOOLKIT="MToolkit wmname LG3D" # May have to install wmname
 #export _JAVA_AWT_WM_NONREPARENTING=1      # Fix for Java applications in dwm
+
+# LLM Tools
 export OLLAMA_API_BASE=http://ollama:11434
-export OPENAI_API_BASE=http://localhost:5001/v1
+export OPENAI_API_BASE=http://localhost:8080/v1
+export OPENAI_API_KEY=1234
+export ZSH_AI_PROVIDER="openai"
+export ZSH_AI_OPENAI_MODEL="qwen3-vl-30b-a3b"
+export ZSH_AI_OPENAI_URL="http://localhost:8080/v1/chat/completions"
+
 
 [ ! -f "$XDG_CONFIG_HOME/shell/shortcutrc" ] && setsid -f shortcuts >/dev/null 2>&1
 
