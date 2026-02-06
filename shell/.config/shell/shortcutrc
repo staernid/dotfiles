@@ -1,3 +1,6 @@
+progress_sync() {
+	watch grep -e Dirty: -e Writeback: /proc/meminfo
+}
 random_alphanum_string() { 
 	head /dev/urandom | tr -dc A-Za-z0-9 | head -c "$1" ; echo 
 }

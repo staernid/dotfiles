@@ -1,5 +1,5 @@
-HISTSIZE=1000
-SAVEHIST=1000
+HISTSIZE=100000
+SAVEHIST=100000
 HISTFILE=~/.cache/zsh_history
 export LS_COLORS="$(vivid generate molokai)"
 autoload -U colors && colors
@@ -101,3 +101,6 @@ eval "$(pyenv init - zsh)"
 source /usr/share/zsh/plugins/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh 2>/dev/null
 #source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh 2>/dev/null
 fastfetch
+
+# opencode
+export PATH=/home/vitezfh/.opencode/bin:$PATH
