@@ -1,0 +1,12 @@
+version = 2
+
+[global]
+allow_fp16 = true
+dll = "/home/vitezfh/Games/Lossless.dll"
+
+[[profile]]
+flow_scale = 1.0
+multiplier = 2
+name = "generic"
+pacing = "none"
+performance_mode = true

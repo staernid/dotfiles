@@ -1,0 +1,36 @@
+version = 1
+
+[global]
+dll = "/home/vitezfh/Games/Lossless.dll"
+
+[[game]]
+exe = "KSP_x64.exe"
+multiplier = 2
+flow_scale = 1.0
+performance_mode = true
+hdr_mode = false
+experimental_present_mode = "fifo"
+
+[[game]]
+exe = "generic"
+multiplier = 2
+flow_scale = 1.0
+performance_mode = true
+hdr_mode = false
+experimental_present_mode = "fifo"
+
+[[game]]
+exe = "mpv"
+multiplier = 2
+flow_scale = 1.0
+performance_mode = false
+hdr_mode = false
+experimental_present_mode = "fifo"
+
+[[game]]
+exe = "vkcube"
+multiplier = 4
+flow_scale = 1.0
+performance_mode = true
+hdr_mode = false
+experimental_present_mode = "fifo"
