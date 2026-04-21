@@ -89,7 +89,6 @@ bindkey -M visual '^[[P' vi-delete
 [ -f /usr/share/fzf/completion.zsh ] && source /usr/share/fzf/completion.zsh
 [ -f /usr/share/fzf/key-bindings.zsh ] && source /usr/share/fzf/key-bindings.zsh
 
-
 [ -f ~/.cache/zsh_modules/zsh-ai/zsh-ai.plugin.zsh ] && source ~/.cache/zsh_modules/zsh-ai/zsh-ai.plugin.zsh
 
 export SSH_AUTH_SOCK=$HOME/.bitwarden-ssh-agent.sock
