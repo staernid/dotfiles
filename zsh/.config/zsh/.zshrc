@@ -16,7 +16,6 @@ setopt HIST_FIND_NO_DUPS
 setopt HIST_SAVE_NO_DUPS
 setopt HIST_BEEP
 
-PATH="$HOME/.scripts:$PATH:$HOME/.cargo/bin:$GOPATH/bin"
 
 # Load aliases and shortcuts if existent.
 [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutrc" ]    && source "${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutrc"
@@ -88,6 +87,7 @@ bindkey -M visual '^[[P' vi-delete
 # FZF
 [ -f /usr/share/fzf/completion.zsh ] && source /usr/share/fzf/completion.zsh
 [ -f /usr/share/fzf/key-bindings.zsh ] && source /usr/share/fzf/key-bindings.zsh
+	[ -f /usr/share/fzf/shell/key-bindings.zsh ] && source /usr/share/fzf/shell/key-bindings.zsh
 
 [ -f ~/.cache/zsh_modules/zsh-ai/zsh-ai.plugin.zsh ] && source ~/.cache/zsh_modules/zsh-ai/zsh-ai.plugin.zsh
 
