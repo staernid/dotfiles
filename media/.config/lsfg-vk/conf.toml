@@ -5,7 +5,6 @@ allow_fp16 = true
 dll = "/opt/Lossless.dll"
 
 [[profile]]
-active_in = "mpv"
 flow_scale = 1.0
 multiplier = 2
 name = "generic"
