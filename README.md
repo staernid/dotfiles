@@ -6,7 +6,7 @@ Linux desktop config managed with GNU stow.
 
 - **git**
 - **stow**
-- **bitwarden CLI** (`bw`) — only needed for `./provision-secrets`
+- **bitwarden CLI** (`bw`) — only needed for `./provision-secrets` (though we download it automatically with a wrapper of bw)
 
 ## Usage
 
