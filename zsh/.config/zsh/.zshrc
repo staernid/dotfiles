@@ -117,10 +117,10 @@ bindkey -s '^f' '^ucd "$(dirname "$(fzf)")"\n'
 
 # ── Syntax highlighting ────────────────────────
 # Load BEFORE keybindings that change zle behaviour
-source /home/staernid/.local/share/zap/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+source $HOME/.local/share/zap/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 # ── Autosuggestions ────────────────────────────
-source /home/staernid/.local/share/zap/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+source $HOME/.local/share/zap/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 
 # ── FZF ────────────────────────────────────────
 source /usr/share/fzf/shell/key-bindings.zsh
@@ -151,10 +151,10 @@ if [[ -d "$PYENV_ROOT/bin" ]]; then
 fi
 
 # pixi
-export PATH="/home/staernid/.pixi/bin:$PATH"
+export PATH="$HOME/.pixi/bin:$PATH"
 
 # opencode
-export PATH="/home/vitezfh/.opencode/bin:$PATH"
+export PATH="$HOME/.opencode/bin:$PATH"
 
 # SSH agent (Bitwarden)
 export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"

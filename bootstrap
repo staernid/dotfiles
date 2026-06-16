@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# bootstrap — one-shot setup for a new machine
+# Prerequisites, stow, theme links, next-steps.
+#
+# After bootstrap completes, run ./provision-secrets to pull SSH keys
+# and other secrets from Bitwarden.
+
+set -euo pipefail
+
+# ── 1. Check prerequisites ────────────────────
+have() { command -v "$1" &>/dev/null; }
+
+if ! have git; then
+  echo "Missing: git"
+  echo "Install git and re-run ./bootstrap."
+  exit 1
+fi
+
+if ! have stow; then
+  echo "stow not found. Attempting to install via package manager..."
+  if [[ -f /etc/os-release ]]; then
+    . /etc/os-release
+    case "$ID" in
+      arch)    sudo pacman -S --noconfirm stow ;;
+      ubuntu|debian) sudo apt-get update && sudo apt-get install -y stow ;;
+      fedora)  sudo dnf install -y stow ;;
+      *)       echo "Unknown OS ($ID). Please install stow manually."; exit 1 ;;
+    esac
+  else
+    echo "Cannot detect OS. Please install stow manually."
+    exit 1
+  fi
+fi
+
+# ── 2. Clone scripts repo ─────────────────────
+SCRIPTS_DIR="$HOME/projects/scripts"
+if [[ ! -d "$SCRIPTS_DIR" ]]; then
+  mkdir -p "$HOME/projects"
+  echo "Cloning git@github.com:staernid/.scripts.git to $SCRIPTS_DIR ..."
+  if git clone git@github.com:staernid/.scripts.git "$SCRIPTS_DIR" 2>/dev/null; then
+    ln -sfT "$SCRIPTS_DIR" "$HOME/.scripts"
+  else
+    echo "Note: Could not clone scripts repo (SSH keys may not be set up yet)."
+    echo "      Run ./provision-secrets first, then re-run ./bootstrap."
+  fi
+else
+  echo "Scripts repo already at $SCRIPTS_DIR"
+  ln -sfT "$SCRIPTS_DIR" "$HOME/.scripts"
+fi
+
+# ── 3. Validate dotfile.conf ──────────────────
+if [[ ! -f dotfile.conf ]]; then
+  if [[ -f dotfile.conf.dist ]]; then
+    cp dotfile.conf.dist dotfile.conf
+    echo ""
+    echo "dotfile.conf created from dotfile.conf.dist."
+    echo "Edit dotfile.conf to match this machine, then re-run ./bootstrap."
+    echo ""
+    exit 0
+  else
+    echo "Error: dotfile.conf missing and no dotfile.conf.dist template found."
+    exit 1
+  fi
+fi
+
+# ── 4. Stow packages & link themes ────────────
+echo "Running deploy (stow + theme links) ..."
+cd "$(dirname "$0")" && exec ./deploy
