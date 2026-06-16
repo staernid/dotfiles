@@ -67,7 +67,7 @@ export ZSH_AI_OPENAI_MODEL="gemma4-e2b-it"
 export ZSH_AI_OPENAI_URL="http://localhost:8080/v1/chat/completions"
 
 # Add all directories in `~/.local/bin` to $PATH
-export PATH="$PATH:$(find ~/.local/bin -type d | paste -sd ':' -):$HOME/.local/share/cargo/bin:$HOME/.scripts:$GOPATH/bin"
+export PATH="$PATH:$(find ~/.local/bin -type d | paste -sd ':' -):$HOME/.local/share/cargo/bin:$HOME/scripts:$GOPATH/bin"
 
 
 [ ! -f "$XDG_CONFIG_HOME/shell/shortcutrc" ] && setsid -f shortcuts >/dev/null 2>&1

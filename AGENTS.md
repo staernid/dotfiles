@@ -13,7 +13,7 @@ Each top-level directory is a stow package: `arch`, `editor`, `kitty`, `media`, 
 - `./deploy` — fast path for re-stowing after config edits: sources `dotfile.conf`, stows listed packages, then links theme symlinks for sway/kitty/waybar.
 - `./provision-secrets` — pull SSH keys and config secrets from Bitwarden vault. Idempotent. Run after `./bootstrap` or whenever secrets need refreshing.
 - `./revert` stows `-D` the listed packages.
-- Scripts live at `$HOME/scripts` (cloned from `git@github.com:staernid/.scripts.git`); symlinked as `~/.scripts`.
+- Scripts live at `$HOME/scripts` (cloned from `git@github.com:staernid/scripts.git`); added to `PATH` via shell profile, no symlink.
 - Config file is gitignored; `dotfile.conf.dist` is the template.
 
 ## Themes for kitty and sway

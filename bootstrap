@@ -34,19 +34,15 @@ if ! have stow; then
 fi
 
 # ── 2. Clone scripts repo ─────────────────────
-SCRIPTS_DIR="$HOME/projects/scripts"
+SCRIPTS_DIR="$HOME/scripts"
 if [[ ! -d "$SCRIPTS_DIR" ]]; then
-  mkdir -p "$HOME/projects"
-  echo "Cloning git@github.com:staernid/.scripts.git to $SCRIPTS_DIR ..."
-  if git clone git@github.com:staernid/.scripts.git "$SCRIPTS_DIR" 2>/dev/null; then
-    ln -sfT "$SCRIPTS_DIR" "$HOME/.scripts"
-  else
+  echo "Cloning git@github.com:staernid/scripts.git to $SCRIPTS_DIR ..."
+  if ! git clone git@github.com:staernid/scripts.git "$SCRIPTS_DIR" 2>/dev/null; then
     echo "Note: Could not clone scripts repo (SSH keys may not be set up yet)."
     echo "      Run ./provision-secrets first, then re-run ./bootstrap."
   fi
 else
   echo "Scripts repo already at $SCRIPTS_DIR"
-  ln -sfT "$SCRIPTS_DIR" "$HOME/.scripts"
 fi
 
 # ── 3. Validate dotfile.conf ──────────────────
