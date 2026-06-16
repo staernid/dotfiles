@@ -1,22 +1,22 @@
 # dotfiles
 
-Minimalist dotfiles managed with GNU stow.
+Minimalist dotfiles managed with GNU stow and a simple deploy script
 
 ## Layout
 
-Each top-level directory is a stow package: `arch`, `editor`, `kitty`, `media`, `shell`, `ssh`, `sway`, `zsh`. Files mirror their target paths under `$HOME` — e.g. `editor/.config/nvim/init.lua` → `~/.config/nvim/init.lua`.
+Each top-level directory is a stow package: `arch`, `editor`, `kitty`, `media`, `shell`, `ssh`, `sway`, `zsh`. Files mirror their target paths under `$HOME` — e.g. `editor/.config/nvim/init.lua` → `~/.config/nvim/init.lua`. Note: Some of the config files are "hidden" (dot prefix)
 
 ## Deployment
 
 - `dotfile.conf` sets `TO_DEPLOY` (which packages to stow) and `SWAY_THEME`.
 - `./deploy` sources `dotfile.conf`, stows listed packages, then links theme symlinks for sway/kitty/waybar.
 - `./revert` stows `-D` the listed packages.
-- Scripts live at `$HOME/scripts` (cloned from `git@github.com:staernid/.scripts.git`); symlinked as `~/.scripts`. The `scripts/` dir in this repo is a placeholder.
+- Scripts live at `$HOME/scripts` (cloned from `git@github.com:staernid/.scripts.git`); symlinked as `~/.scripts`.
 - Config file is gitignored; `dotfile.conf.dist` is the template.
 
-## Themes
+## Themes for kitty and sway
 
-Three themes: `dark` (current), `autumn`, `ocean`. Each package uses its own mechanism — sway/waybar: `style.css` symlinked; kitty: `theme.link` symlinked to `$THEME.conf`.
+Although currently unmaintained, there exist three themes: `dark` (current), `autumn`, `ocean`. Each package uses its own mechanism — sway/waybar: `style.css` symlinked; kitty: `theme.link` symlinked to `$THEME.conf`.
 
 ## Conventions
 
