@@ -6,9 +6,8 @@ Wants=network-online.target
 [Service]
 Restart=always
 RestartSec=3
-WorkingDirectory=/home/staernid/llama
-ExecStart=/usr/local/bin/llama-swap -config config.yaml
-Environment=HOME=/home/staernid
+WorkingDirectory=%h/llama
+ExecStart=/usr/local/bin/llama-swap -config %h/llama/config.yaml
 
 [Install]
 WantedBy=default.target

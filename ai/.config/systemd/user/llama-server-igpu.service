@@ -1,14 +1,13 @@
 [Unit]
-Description=Llama Server Service
+Description=Llama Server Service (iGPU)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Restart=always
 RestartSec=3
-WorkingDirectory=/home/staernid/llama
-ExecStart=/usr/bin/llama-server --port 8081 --models-preset /home/staernid/llama/models.ini
-Environment=HOME=/home/staernid
+WorkingDirectory=%h/llama
+ExecStart=/usr/bin/llama-server --port 8081 --models-preset %h/llama/models.ini
 Environment=GGML_VK_VISIBLE_DEVICES=0
 
 [Install]
