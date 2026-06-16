@@ -12,7 +12,7 @@ echo Sourcing that config ...
 . "$PWD"/dotfile.conf
 
 echo Running stow on "$TO_DEPLOY" ...
-stow $TO_DEPLOY
+stow "$@" $TO_DEPLOY
 
 if [[ "$TO_DEPLOY" == *"sway"* ]]; then
 	# TODO: add function "relink"

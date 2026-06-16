@@ -1,0 +1,15 @@
+[Unit]
+Description=Llama Server Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+RestartSec=3
+WorkingDirectory=/home/staernid/llama
+ExecStart=/usr/bin/llama-server --models-preset /home/staernid/llama/models.ini
+Environment=HOME=/home/staernid
+Environment=GGML_VK_VISIBLE_DEVICES=1
+
+[Install]
+WantedBy=default.target

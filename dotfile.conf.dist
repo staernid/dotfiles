@@ -1,4 +1,4 @@
 #!/bin/sh
 
-TO_DEPLOY="arch editor media shell ssh zsh"
+TO_DEPLOY="secrets editor media shell ssh zsh"
 SWAY_THEME=dark
