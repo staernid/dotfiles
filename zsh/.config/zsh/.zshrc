@@ -121,6 +121,9 @@ bindkey -s '^f' '^ucd "$(dirname "$(fzf)")"\n'
 }
 
 # ── Autosuggestions ────────────────────────────
+# Use completion system (command/path) instead of history
+ZSH_AUTOSUGGEST_STRATEGY=(completion)
+
 () {
   local f
   for f in \

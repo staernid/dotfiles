@@ -61,7 +61,7 @@ shell/.config/shell/
 | Plugin | Source | Purpose |
 |---|---|---|
 | `zsh-syntax-highlighting` | `~/.local/share/zap/plugins/...` | Real-time command highlighting |
-| `zsh-autosuggestions` | `~/.local/share/zap/plugins/...` | History-based autocomplete suggestions |
+| `zsh-autosuggestions` | `~/.local/share/zap/plugins/...` | Completion-based autosuggestions (ghost text from commands/paths, not history) |
 | `fzf` key-bindings | `/usr/share/fzf/shell/key-bindings.zsh` | Ctrl-T (files), Ctrl-R (history) |
 
 ### Keybindings
