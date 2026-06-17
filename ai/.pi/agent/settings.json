@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.79.4",
+  "lastChangelogVersion": "0.79.6",
   "packages": [
     "npm:pi-llama-cpp",
     "npm:@narumitw/pi-caffeinate",
@@ -7,7 +7,9 @@
     "npm:@narumitw/pi-statusline",
     "npm:@narumitw/pi-lsp",
     "npm:pi-blackhole",
-    "npm:pi-supergsd"
+    "npm:pi-supergsd",
+    "npm:@tmustier/extending-pi",
+    "npm:pi-web-access"
   ],
   "llamaServerUrl": "http://127.0.0.1:8080;http://127.0.0.1:8081",
   "defaultProvider": "deepseek",
