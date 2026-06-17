@@ -33,7 +33,32 @@ if ! have stow; then
   fi
 fi
 
-# ── 2. Clone scripts repo ─────────────────────
+# ── 2. Install zsh plugin packages ────────────
+# Required by .zshrc: syntax highlighting, autosuggestions, fzf
+ZSH_PKGS=
+if [[ -f /etc/os-release ]]; then
+  . /etc/os-release
+  case "$ID" in
+    arch)
+      ZSH_PKGS="zsh-syntax-highlighting zsh-autosuggestions fzf"
+      sudo pacman -S --noconfirm --needed $ZSH_PKGS
+      ;;
+    fedora)
+      ZSH_PKGS="zsh-syntax-highlighting zsh-autosuggestions fzf"
+      sudo dnf install -y $ZSH_PKGS
+      ;;
+    ubuntu|debian)
+      ZSH_PKGS="zsh-syntax-highlighting zsh-autosuggestions fzf"
+      sudo apt-get update && sudo apt-get install -y $ZSH_PKGS
+      ;;
+    *)
+      echo "Unknown OS ($ID). Skipping zsh plugin install."
+      echo "Install fzf, zsh-syntax-highlighting, zsh-autosuggestions manually."
+      ;;
+  esac
+fi
+
+# ── 3. Clone scripts repo ─────────────────────
 SCRIPTS_DIR="$HOME/scripts"
 if [[ ! -d "$SCRIPTS_DIR" ]]; then
   echo "Cloning git@github.com:staernid/scripts.git to $SCRIPTS_DIR ..."
@@ -45,7 +70,7 @@ else
   echo "Scripts repo already at $SCRIPTS_DIR"
 fi
 
-# ── 3. Validate dotfile.conf ──────────────────
+# ── 4. Validate dotfile.conf ──────────────────
 if [[ ! -f dotfile.conf ]]; then
   if [[ -f dotfile.conf.dist ]]; then
     cp dotfile.conf.dist dotfile.conf
@@ -60,6 +85,6 @@ if [[ ! -f dotfile.conf ]]; then
   fi
 fi
 
-# ── 4. Stow packages & link themes ────────────
+# ── 5. Stow packages & link themes ────────────
 echo "Running deploy (stow + theme links) ..."
 cd "$(dirname "$0")" && exec ./deploy

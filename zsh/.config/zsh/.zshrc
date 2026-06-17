@@ -117,13 +117,29 @@ bindkey -s '^f' '^ucd "$(dirname "$(fzf)")"\n'
 
 # ── Syntax highlighting ────────────────────────
 # Load BEFORE keybindings that change zle behaviour
-source $HOME/.local/share/zap/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+() {
+  local f
+  for f in \
+    "$HOME/.local/share/zap/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+    "/usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+    "/usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"; do
+    [[ -f "$f" ]] && { source "$f"; break }
+  done
+}
 
 # ── Autosuggestions ────────────────────────────
-source $HOME/.local/share/zap/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+() {
+  local f
+  for f in \
+    "$HOME/.local/share/zap/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+    "/usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+    "/usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh"; do
+    [[ -f "$f" ]] && { source "$f"; break }
+  done
+}
 
 # ── FZF ────────────────────────────────────────
-source /usr/share/fzf/shell/key-bindings.zsh
+[[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
 
 # ── Shell config sources ───────────────────────
 () {
