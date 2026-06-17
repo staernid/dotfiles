@@ -39,9 +39,10 @@ shell/.config/shell/
 - **Options**: `EXTENDED_HISTORY` (timestamps), `INC_APPEND_HISTORY` (write per command), `SHARE_HISTORY` (cross-session), plus full dedup chain
 
 ### Prompt
-- **Left**: `[user@host ~/path]$` with colour-matched theme
-- **Right**: Git branch/action via `vcs_info` — e.g. `(main)` or `(feature|rebase)`
-- **Colours**: Uses modern `%F{color}...%f` syntax (not deprecated `$fg[...]`)
+- **Engine**: [Starship](https://starship.rs) — fast, minimal, highly configurable
+- **Prompt**: `user@host ~/path ❯` with colour-matched theme
+- **Git info**: Branch + status inline via starship `git_branch` / `git_status` modules
+- **Colours**: Configured in `shell/.config/starship.toml` (molokai-inspired palette)
 
 ### Completion
 - **Smart caching**: Only rebuilds `.zcompdump` once every 24 hours (~40ms vs ~200ms on full rebuild)
@@ -80,6 +81,7 @@ shell/.config/shell/
 - **pixi**: `~/pixi/bin` on `$PATH`
 - **opencode**: `~/.opencode/bin` on `$PATH`
 - **SSH agent**: Uses Bitwarden SSH agent socket (`~/.bitwarden-ssh-agent.sock`)
+- **Starship**: Configured via `shell` stow package (`~/.config/starship.toml`)
 
 ### Startup
 - Greets with `fastfetch` at the end of init
@@ -97,6 +99,6 @@ shell/.config/shell/
 
 - **Rebuild completions manually**: Delete `~/.config/zsh/.zcompdump*` and restart zsh
 - **Add a tool to PATH**: Prefer the Tools section in `.zshrc` (same format)
-- **Change prompt colours**: Edit `$PROMPT` and `$RPROMPT` in the Prompt section
+- **Change prompt**: Edit `~/.config/starship.toml` (the `starship` stow package)
 - **Add a keybinding**: Add a `bindkey` entry in the Keybindings section — use `zle -N` for widget functions, `bindkey -s` for simple string sequences
 - All `.zshrc` changes activate on next shell start (or `source ~/.config/zsh/.zshrc`)

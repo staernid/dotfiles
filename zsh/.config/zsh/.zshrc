@@ -57,15 +57,8 @@ setopt COMPLETE_IN_WORD        # complete from cursor, not just end
 setopt ALWAYS_TO_END           # move cursor to end of completion
 setopt PROMPT_SUBST            # allow expansion in prompt
 
-# ── Prompt ─────────────────────────────────────
-autoload -Uz vcs_info
-zstyle ':vcs_info:git:*' formats       '(%b)'
-zstyle ':vcs_info:git:*' actionformats '(%b|%a)'
-
-precmd() { vcs_info }
-
-PROMPT='%B%F{red}[%F{yellow}%n%F{green}@%F{blue}%M %F{magenta}%~%F{red}]%f%b '
-RPROMPT='%F{cyan}${vcs_info_msg_0_}%f'
+# ── Prompt (Starship) ───────────────────────────
+eval "$(starship init zsh)"
 
 # ── Vi mode & cursor shapes ────────────────────
 bindkey -v
