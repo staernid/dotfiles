@@ -8,7 +8,26 @@
 
 set -euo pipefail
 
-# ── 1. Check prerequisites ────────────────────
+# ── 1. Distro detection ───────────────────────
+DISTRO=
+if [[ -f /etc/os-release ]]; then
+  . /etc/os-release
+  case "${ID:-}" in
+    arch|manjaro|endeavouros) DISTRO=arch ;;
+    fedora)                   DISTRO=fedora ;;
+    ubuntu|debian|linuxmint)  DISTRO=debian ;;
+  esac
+  # Fall back to ID_LIKE for unrecognised derivatives (e.g. Artix, CachyOS)
+  if [[ -z "$DISTRO" && -n "${ID_LIKE:-}" ]]; then
+    case "$ID_LIKE" in
+      arch*)  DISTRO=arch ;;
+      fedora) DISTRO=fedora ;;
+      debian) DISTRO=debian ;;
+    esac
+  fi
+fi
+
+# ── 2. Check prerequisites ────────────────────
 have() { command -v "$1" &>/dev/null; }
 
 if ! have git; then
@@ -17,48 +36,33 @@ if ! have git; then
   exit 1
 fi
 
-if ! have stow; then
-  echo "stow not found. Attempting to install via package manager..."
-  if [[ -f /etc/os-release ]]; then
-    . /etc/os-release
-    case "$ID" in
-      arch)    sudo pacman -S --noconfirm stow ;;
-      ubuntu|debian) sudo apt-get update && sudo apt-get install -y stow ;;
-      fedora)  sudo dnf install -y stow ;;
-      *)       echo "Unknown OS ($ID). Please install stow manually."; exit 1 ;;
-    esac
-  else
-    echo "Cannot detect OS. Please install stow manually."
-    exit 1
-  fi
-fi
-
-# ── 2. Install zsh plugin packages ────────────
-# Required by .zshrc: syntax highlighting, autosuggestions, fzf
-ZSH_PKGS=
-if [[ -f /etc/os-release ]]; then
-  . /etc/os-release
-  case "$ID" in
-    arch)
-      ZSH_PKGS="zsh-syntax-highlighting zsh-autosuggestions fzf"
-      sudo pacman -S --noconfirm --needed $ZSH_PKGS
-      ;;
-    fedora)
-      ZSH_PKGS="zsh-syntax-highlighting zsh-autosuggestions fzf"
-      sudo dnf install -y $ZSH_PKGS
-      ;;
-    ubuntu|debian)
-      ZSH_PKGS="zsh-syntax-highlighting zsh-autosuggestions fzf"
-      sudo apt-get update && sudo apt-get install -y $ZSH_PKGS
-      ;;
+install_pkg() {
+  case "$DISTRO" in
+    arch)   sudo pacman -S --noconfirm --needed "$@" ;;
+    fedora) sudo dnf install -y "$@" ;;
+    debian) sudo apt-get update && sudo apt-get install -y "$@" ;;
     *)
-      echo "Unknown OS ($ID). Skipping zsh plugin install."
-      echo "Install fzf, zsh-syntax-highlighting, zsh-autosuggestions manually."
+      echo "Cannot determine package manager. Install manually: $*"
+      exit 1
       ;;
   esac
+}
+
+if ! have stow; then
+  echo "stow not found. Installing..."
+  install_pkg stow
 fi
 
-# ── 3. Clone scripts repo ─────────────────────
+# ── 3. Install zsh plugin packages ────────────
+# Required by .zshrc: syntax highlighting, autosuggestions, fzf
+if [[ -n "$DISTRO" ]]; then
+  install_pkg zsh-syntax-highlighting zsh-autosuggestions fzf
+else
+  echo "Unknown OS. Skipping zsh plugin install."
+  echo "Install fzf, zsh-syntax-highlighting, zsh-autosuggestions manually."
+fi
+
+# ── 4. Clone scripts repo ─────────────────────
 SCRIPTS_DIR="$HOME/scripts"
 if [[ ! -d "$SCRIPTS_DIR" ]]; then
   echo "Cloning git@github.com:staernid/scripts.git to $SCRIPTS_DIR ..."
@@ -70,7 +74,7 @@ else
   echo "Scripts repo already at $SCRIPTS_DIR"
 fi
 
-# ── 4. Validate dotfile.conf ──────────────────
+# ── 5. Validate dotfile.conf ──────────────────
 if [[ ! -f dotfile.conf ]]; then
   if [[ -f dotfile.conf.dist ]]; then
     cp dotfile.conf.dist dotfile.conf
@@ -85,6 +89,6 @@ if [[ ! -f dotfile.conf ]]; then
   fi
 fi
 
-# ── 5. Stow packages & link themes ────────────
+# ── 6. Stow packages & link themes ────────────
 echo "Running deploy (stow + theme links) ..."
 cd "$(dirname "$0")" && exec ./deploy
