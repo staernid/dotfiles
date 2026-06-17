@@ -139,7 +139,14 @@ bindkey -s '^f' '^ucd "$(dirname "$(fzf)")"\n'
 }
 
 # ── FZF ────────────────────────────────────────
-[[ -f /usr/share/fzf/shell/key-bindings.zsh ]] && source /usr/share/fzf/shell/key-bindings.zsh
+() {
+  local f
+  for f in \
+    "/usr/share/fzf/shell/key-bindings.zsh" \
+    "/usr/share/fzf/key-bindings.zsh"; do
+    [[ -f "$f" ]] && { source "$f"; break }
+  done
+}
 
 # ── Shell config sources ───────────────────────
 () {
