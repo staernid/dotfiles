@@ -1,0 +1,50 @@
+logLevel: debug
+sendLoadingState: true
+
+macros: 
+  "server-latest": >
+    llama-server
+    --host 0.0.0.0 --port ${PORT}
+    --no-warmup --jinja
+    --flash-attn on
+    --cache-type-k q8_0 --cache-type-v q8_0
+    --kv-unified
+    --no-mmap
+    --parallel 1
+    --repack
+    --warmup
+    --ctx-size 32768
+
+  "opts-qwen3_6-standard": 
+    --top-p 0.95 --top-k 20 --temp 1.0 --presence-penalty 1.5 --min-p 0.00
+    --spec-type draft-mtp --spec-draft-n-max 3
+
+  "opts-qwen3_6-coding": 
+    --top-p 0.95 --top-k 20 --temp 0.6 --presence-penalty 0.0 --min-p 0.00
+    --spec-type draft-mtp --spec-draft-n-max 3
+
+models:
+  qwen3.6-35b-a3b:
+    ttl: 360
+    cmd: >
+      ${server-latest}
+      --model models/Qwen3.6-35B-A3B-UD-Q5_K_XL.gguf
+      --mmproj models/Qwen3.6-35B-A3B-UD-mmproj-F16.gguf
+      --cpu-moe
+      ${opts-qwen3_6-standard}
+
+  qwen3.6-35b-a3b-coding:
+    ttl: 360
+    cmd: >
+      ${server-latest}
+      --model models/Qwen3.6-35B-A3B-UD-Q5_K_XL.gguf
+      --mmproj models/Qwen3.6-35B-A3B-UD-mmproj-F16.gguf
+      --cpu-moe
+      ${opts-qwen3_6-coding}
+
+#groups:
+#  "embedding":
+#    persistent: true
+#    #exclusive: false
+#    members:
+#      - "none_123"

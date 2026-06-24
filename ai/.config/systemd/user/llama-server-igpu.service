@@ -7,8 +7,8 @@ Wants=network-online.target
 Restart=always
 RestartSec=3
 WorkingDirectory=%h/llama
-ExecStart=/usr/bin/llama-server --port 8081 --models-preset %h/llama/models.ini
-Environment=GGML_VK_VISIBLE_DEVICES=0
+ExecStart=/usr/bin/llama-server --port 8181 --models-preset %h/llama/models.ini
+Environment=MESA_VK_DEVICE_SELECT=1002:1638!
 
 [Install]
 WantedBy=default.target

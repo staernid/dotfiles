@@ -6,15 +6,17 @@
     "npm:pi-openspec-status",
     "npm:@narumitw/pi-statusline",
     "npm:@narumitw/pi-lsp",
-    "npm:pi-blackhole",
     "npm:pi-supergsd",
     "npm:@tmustier/extending-pi",
-    "npm:pi-web-access"
+    "npm:pi-web-access",
+    "npm:@zosmaai/pi-llm-wiki",
+    "npm:pi-unified-exec"
   ],
   "llamaServerUrl": "http://127.0.0.1:8080;http://127.0.0.1:8081",
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-v4-flash",
   "hideThinkingBlock": true,
   "theme": "dark",
-  "quietStartup": true
+  "quietStartup": true,
+  "defaultThinkingLevel": "off"
 }
