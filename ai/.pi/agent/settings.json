@@ -12,7 +12,7 @@
     "npm:@zosmaai/pi-llm-wiki",
     "npm:pi-unified-exec"
   ],
-  "llamaServerUrl": "http://127.0.0.1:8080;http://127.0.0.1:8081",
+  "llamaServerUrl": "http://127.0.0.1:8180;http://127.0.0.1:8181",
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-v4-flash",
   "hideThinkingBlock": true,
