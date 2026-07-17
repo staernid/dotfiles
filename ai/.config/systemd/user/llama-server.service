@@ -7,7 +7,7 @@ Wants=network-online.target
 Restart=always
 RestartSec=3
 WorkingDirectory=%h/llama
-ExecStart=/usr/bin/llama-server --port 8180 --models-preset %h/llama/models.ini --device Vulkan0
+ExecStart=/usr/bin/llama-server --port 8180 --host 0.0.0.0 --models-preset %h/llama/models.ini --device Vulkan0
 
 [Install]
 WantedBy=default.target
