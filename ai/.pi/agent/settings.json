@@ -1,22 +1,51 @@
 {
-  "lastChangelogVersion": "0.80.2",
+  "lastChangelogVersion": "0.80.6",
   "packages": [
     "npm:pi-llama-cpp",
     "npm:@narumitw/pi-caffeinate",
-    "npm:pi-openspec-status",
     "npm:@narumitw/pi-statusline",
-    "npm:@narumitw/pi-lsp",
-    "npm:pi-supergsd",
-    "npm:@tmustier/extending-pi",
+    {
+      "source": "npm:pi-supergsd",
+      "extensions": [
+        "+index.ts"
+      ],
+      "skills": [
+        "+skills/brainstorming/SKILL.md",
+        "+skills/executing-plans/SKILL.md",
+        "+skills/finishing-a-development-branch/SKILL.md",
+        "+skills/receiving-code-review/SKILL.md",
+        "+skills/requesting-code-review/SKILL.md",
+        "+skills/systematic-debugging/SKILL.md",
+        "+skills/test-driven-development/SKILL.md",
+        "+skills/verification-before-completion/SKILL.md",
+        "+skills/writing-plans/SKILL.md",
+        "+skills/writing-roadmaps/SKILL.md",
+        "+skills/writing-skills/SKILL.md"
+      ]
+    },
+    {
+      "source": "npm:@tmustier/extending-pi",
+      "skills": [
+        "+SKILL.md",
+        "+skill-creator/SKILL.md"
+      ]
+    },
     "npm:pi-web-access",
-    "npm:@zosmaai/pi-llm-wiki",
-    "npm:pi-unified-exec"
+    "npm:pi-rtk-optimizer",
+    "npm:@ryan_nookpi/pi-extension-headroom",
+    "npm:pire-browser"
   ],
   "llamaServerUrl": "http://127.0.0.1:8180;http://127.0.0.1:8181",
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-v4-flash",
-  "hideThinkingBlock": true,
+  "hideThinkingBlock": false,
   "theme": "dark",
   "quietStartup": true,
-  "defaultThinkingLevel": "off"
+  "defaultThinkingLevel": "medium",
+  "skills": [
+    "+skills/caveman/SKILL.md",
+    "+skills/write-a-skill/SKILL.md",
+    "+skills/zoom-out/SKILL.md",
+    "+skills/qa/SKILL.md"
+  ]
 }
