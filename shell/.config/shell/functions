@@ -1,0 +1,72 @@
+# functions — interactive shell helper functions
+
+# lfcd: Change directory upon exiting lf file manager
+lfcd() {
+  local tmp
+  tmp="$(mktemp -uq)"
+  trap 'rm -f "$tmp"' EXIT
+  lf -last-dir-path="$tmp" "$@"
+  if [[ -f "$tmp" ]]; then
+    local dir
+    dir="$(cat "$tmp")"
+    [[ -n "$dir" && -d "$dir" && "$dir" != "$PWD" ]] && cd "$dir" || true
+  fi
+}
+
+# killport: Kill process running on a specific port cleanly (SIGTERM, then SIGKILL)
+killport() {
+  local port="$1"
+  if [[ -z "$port" ]]; then
+    echo "Usage: killport <port>" >&2
+    return 1
+  fi
+
+  local pids
+  pids=$(lsof -t -i:"$port" 2>/dev/null)
+  if [[ -z "$pids" ]]; then
+    echo "No process found on port $port"
+    return 1
+  fi
+
+  echo "Terminating process(es) on port $port (PID: $pids)..."
+  kill -15 $pids 2>/dev/null || kill -9 $pids 2>/dev/null
+}
+
+# se: Select and edit scripts in ~/.local/bin using fzf
+se() {
+  local choice
+  choice="$(find "$HOME/.local/bin" -mindepth 1 -maxdepth 2 -type f -printf '%P\n' 2>/dev/null | fzf)"
+  [[ -n "$choice" && -f "$HOME/.local/bin/$choice" ]] && "$EDITOR" "$HOME/.local/bin/$choice"
+}
+
+# setgov: Change CPU scaling governor (works with or without sudo)
+setgov() {
+  local gov="$1"
+  if [[ -z "$gov" ]]; then
+    echo "Usage: setgov <governor> (e.g. performance, powersave)" >&2
+    return 1
+  fi
+  if command -v sudo &>/dev/null; then
+    echo "$gov" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+  else
+    echo "$gov" | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+  fi
+}
+
+# ytdlp_transcript_clean: Download auto-generated YouTube subtitles as clean text
+ytdlp_transcript_clean() {
+  local url="$1"
+  if [[ -z "$url" ]]; then
+    echo "Usage: ytdlp_transcript_clean <youtube-url>" >&2
+    return 1
+  fi
+
+  yt-dlp --skip-download --write-subs --write-auto-subs --sub-lang en --sub-format ttml --convert-subs srt --output "transcript.%(ext)s" "$url"
+  if [[ -f "transcript.en.srt" ]]; then
+    sed '/^$/d' transcript.en.srt | grep -v '^[0-9]*$' | grep -v '\-->' | sed 's/<[^>]*>//g' | tr '\n' ' ' > output.txt
+    echo "Transcript extracted to output.txt"
+  else
+    echo "Failed to extract transcript" >&2
+    return 1
+  fi
+}

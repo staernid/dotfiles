@@ -1,19 +1,17 @@
 $include /etc/inputrc
+
+# Vi editing mode
 set editing-mode vi
+
 $if mode=vi
+  # Show cursor mode in prompt (beam for insert mode, block for command mode)
+  set show-mode-in-prompt on
+  set vi-ins-mode-string \1\e[6 q\2
+  set vi-cmd-mode-string \1\e[2 q\2
 
-set show-mode-in-prompt on
-set vi-ins-mode-string \1\e[6 q\2
-set vi-cmd-mode-string \1\e[2 q\2
+  set keymap vi-command
+  Control-l: clear-screen
 
-set keymap vi-command
-# these are for vi-command mode
-Control-l: clear-screen
-Control-a: beginning-of-line
-
-set keymap vi-insert
-# these are for vi-insert mode
-Control-l: clear-screen
-Control-a: beginning-of-line
-
+  set keymap vi-insert
+  Control-l: clear-screen
 $endif

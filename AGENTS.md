@@ -4,7 +4,7 @@ Minimalist dotfiles managed with GNU stow. Usage docs live in the script headers
 
 ## Layout
 
-Each top-level directory is a stow package: `ai`, `arch`, `editor`, `kitty`, `media`, `secrets`, `shell`, `ssh`, `sway`. Files mirror their target paths under `$HOME` — e.g. `editor/.config/nvim/init.lua` → `~/.config/nvim/init.lua`. Note: Some of the config files are "hidden" (dot prefix)
+Each top-level directory is a stow package: `ai`, `arch`, `editor`, `media`, `secrets`, `shell`, `ssh`. Files mirror their target paths under `$HOME` — e.g. `editor/.config/nvim/init.lua` → `~/.config/nvim/init.lua`. Note: Some of the config files are "hidden" (dot prefix)
 
 ## Deployment
 
@@ -16,7 +16,7 @@ Each top-level directory is a stow package: `ai`, `arch`, `editor`, `kitty`, `me
 ## Conventions
 
 - Prefer XDG base directory layout (`$XDG_CONFIG_HOME`).
-- Shell configs split into modular files under `shell/.config/shell/`: `aliasrc`, `shortcutrc`, `profile`, `inputrc`, `bm-dirs`, `bm-files`.
+- Shell configs split into modular files under `shell/.config/shell/`: `aliasrc`, `functions`, `profile`, `inputrc`.
 - Keep changes bounded, minimal, and single-purpose. Avoid adding files or dependencies that don't solve a concrete current problem.
 - Do not add attribution trailers to commit messages.
 

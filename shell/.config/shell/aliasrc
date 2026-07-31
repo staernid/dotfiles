@@ -1,95 +1,60 @@
-#!/bin/sh
+# aliasrc — shell aliases
 
-# Use neovim for vim if present.
-[ -x "$(command -v nvim)" ] && alias vim="nvim" vimdiff="nvim -d"
+# Editor aliases
+if command -v nvim &>/dev/null; then
+  alias vim="nvim"
+  alias vimdiff="nvim -d"
+fi
+alias e='$EDITOR'
+alias v='$EDITOR'
 
-# Use $XINITRC variable if file exists.
-[ -f "$XINITRC" ] && alias startx='startx $XINITRC'
+# Safety & verbosity defaults
+alias cp="cp -iv"
+alias mv="mv -iv"
+alias rm="rm -vI"
+alias mkd="mkdir -pv"
+alias bc="bc -ql"
+alias rsync="rsync -vrPlu"
 
-[ -f "$MBSYNCRC" ] && alias mbsync='mbsync -c $MBSYNCRC'
+# Colorized output
+alias ls="ls -hN --color=auto --group-directories-first"
+alias grep="grep --color=auto"
+alias diff="diff --color=auto"
+alias ip="ip -color=auto"
 
-# sudo not required for some system commands
-for command in mount umount sv pacman updatedb su shutdown poweroff reboot; do
-  alias $command="sudo $command"
-done
-unset command
+# Short shortcuts
+alias ka="killall"
+alias g="git"
+alias cx="chmod +x"
+alias myp="ps -fjH -u \$USER"
 
-se() {
-  choice="$(find ~/.local/bin -mindepth 1 -printf '%P\n' | fzf)"
-  [ -f "$HOME/.local/bin/$choice" ] && $EDITOR "$HOME/.local/bin/$choice"
-}
+# Git & GitHub CLI aliases
+alias adog="git log --all --decorate --oneline --graph"
+alias gpr="gh pr checkout"
+alias gpv="gh pr view --web"
 
+# Wayland Clipboard shortcuts
+if command -v wl-copy &>/dev/null; then
+  alias cpy="wl-copy"
+  alias pst="wl-paste"
+fi
 
-# Verbosity and settings that you pretty much just always are going to want.
-alias \
-  cp="cp -iv" \
-  mv="mv -iv" \
-  rm="rm -vI" \
-  bc="bc -ql" \
-  rsync="rsync -vrPlu" \
-  mkd="mkdir -pv" \
-  yt="yt-dlp --embed-metadata -i --default-search 'ytsearch'" \
-  yta="yt-dlp --embed-metadata --default-search 'ytsearch' -i -x -f bestaudio/best" \
-  ytt="yt-dlp --skip-download --write-thumbnail" \
-  yt-whatsapp="yt-dlp --embed-metadata -f 'bestvideo[height<=1080]+bestaudio/best' --recode-video mp4" \
-  ffmpeg="ffmpeg -hide_banner" \
-  adog='git log --all --decorate --oneline --graph' \
-  bat="cat /sys/class/power_supply/BAT?/capacity"
+# Pacman (Arch Linux) aliases
+alias pac="pacman"
+alias pacs="pacman -S"
+alias pacss="pacman -Ss"
+alias pacsyu="pacman -Syu"
+alias pacrns="pacman -Rns"
 
-# Colorize commands when possible.
-alias \
-  ls="ls -hN --color=auto --group-directories-first" \
-  grep="grep --color=auto" \
-  diff="diff --color=auto" \
-  ccat="highlight --out-format=ansi" \
-  ip="ip -color=auto"
+# Void Linux aliases
+alias xi="sudo xbps-install"
+alias xr="sudo xbps-remove -R"
+alias xq="xbps-query -R"
+alias xs="xbps-query -Rs"
 
-# These common commands are just too long! Abbreviate them.
-alias \
-  ka="killall" \
-  g="git" \
-  trem="transmission-remote" \
-  sdn="shutdown -h now" \
-  e='$EDITOR' \
-  dd_generic="sudo dd bs=1M iflag=fullblock status=progress" \
-  v='$EDITOR' \
-  pac="pacman" \
-  pacs="pacman -S" \
-  pacss="pacman -Ss" \
-  pacsyu="pacman -Syu" \
-  pacrns="pacman -Rns" \
-  pacqdtq="pacman -Qdtq" \
-  pac-asexplicit="pacman -D --asexplicit" \
-  pac-fzf="pacman -Qq | fzf --preview 'pacman -Qil {}' --layout=reverse --bind 'enter:execute(pacman -Qil {} | less)'" \
-  pac-unowned="(export LC_ALL=C.UTF-8; comm -13 <(pacman -Qlq | sed 's,/$,,' | sort) <(find /etc /usr /opt -path /usr/lib/modules -prune -o -print | sort))" \
-  pac-fromlist='pacman -S --needed $(comm -12 <(pacman -Slq | sort) <(sort pkglist.txt))' \
-  xi="sudo xbps-install" \
-  xr="sudo xbps-remove -R" \
-  xq="xbps-query -R" \
-  xs="xbps-query -Rs" \
-  z="zathura" \
-  svenv="source .venv/bin/activate" \
-  cx='chmod +x' \
-  myp='ps -fjH -u $USER'
-
-# This enables the `pauseallmpv` command.
-#alias mpv="mpv --input-ipc-server=/tmp/mpvsoc$(date +%s)"
-
-# Wayland / SwayWM specific settings
-alias wf-cutout='$(wf-recorder -g "$(slurp)")'
-alias logout="[[ -o login ]] && logout || qdbus org.kde.ksmserver /KSMServer logout 0 0 1"
-
-# Kubectl
-alias kubens="kubectl ns"
-alias kubectx="kubectl ctx"
-alias kns="kubectl ns"
-alias kcx="kubectl ctx"
-
-# Gcloud
-alias gcal="gcloud auth login"
-alias gcaal="gcloud auth application-default login"
-
-alias \
-  lf="lfub" \
-  magit="nvim -c MagitOnly" \
-  ref='shortcuts >/dev/null; source ${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutrc ; source ${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutenvrc'
+# Media & Downloading
+alias yt="yt-dlp --embed-metadata -i --default-search 'ytsearch'"
+alias yta="yt-dlp --embed-metadata --default-search 'ytsearch' -i -x -f bestaudio/best"
+alias ytt="yt-dlp --skip-download --write-thumbnail"
+alias ffmpeg="ffmpeg -hide_banner"
+alias bat="cat /sys/class/power_supply/BAT?/capacity"
