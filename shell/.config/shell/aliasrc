@@ -16,6 +16,9 @@ alias mkd="mkdir -pv"
 alias bc="bc -ql"
 alias rsync="rsync -vrPlu"
 
+# System update shortcut
+alias up="update_system"
+
 # Colorized output
 alias ls="ls -hN --color=auto --group-directories-first"
 alias grep="grep --color=auto"
