@@ -1,0 +1,5 @@
+#! /bin/sh
+# Alternative to youtube-viewer, useful if it breaks
+# Awful quality though
+str="$*"
+yt-dlp -i "ytsearch:$str" -o - | mpv -

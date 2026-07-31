@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+if [ "${PAM_TYPE}" = "open_session" ]; then
+  /home/vitezfh/.scripts/send-ntfy \
+    --config /home/vitezfh/.ntfy \
+    --topic server \
+    --tags warning \
+    --priority 4 \
+    --title "Alert for Host: $(cat /proc/sys/kernel/hostname)" \
+    "SSH login: ${PAM_USER} from ${PAM_RHOST}"
+fi

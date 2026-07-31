@@ -1,0 +1,48 @@
+#!/bin/bash
+set -euo pipefail
+
+# Determine the directory where this script resides
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Generate SRT files
+cat << 'EOF' > "$DIR/spa.srt"
+1
+00:00:00,000 --> 00:00:05,000
+Hola Mundo
+EOF
+
+cat << 'EOF' > "$DIR/eng.srt"
+1
+00:00:00,000 --> 00:00:05,000
+Hello World
+EOF
+
+cat << 'EOF' > "$DIR/und.srt"
+1
+00:00:00,000 --> 00:00:05,000
+Unknown Lang
+EOF
+
+# Generate mock.mkv with strict 5 seconds limit
+ffmpeg -y -f lavfi -i testsrc=duration=5:size=320x240:rate=25 \
+  -f lavfi -i anullsrc=r=44100:cl=stereo \
+  -f lavfi -i anullsrc=r=44100:cl=stereo \
+  -f lavfi -i anullsrc=r=44100:cl=stereo \
+  -i "$DIR/spa.srt" \
+  -i "$DIR/eng.srt" \
+  -i "$DIR/und.srt" \
+  -map 0:v -map 1:a -map 2:a -map 3:a -map 4:s -map 5:s -map 6:s \
+  -c:v libx264 -c:a aac -c:s srt \
+  -metadata:s:a:0 language=spa -metadata:s:a:0 title="Spanish Audio" \
+  -metadata:s:a:1 language=eng -metadata:s:a:1 title="English Audio" \
+  -metadata:s:a:2 title="Unknown Audio" \
+  -metadata:s:s:0 language=spa -metadata:s:s:0 title="Spanish Subs" \
+  -metadata:s:s:1 language=eng -metadata:s:s:1 title="English Subs" \
+  -metadata:s:s:2 title="Unknown Subs" \
+  -t 5 \
+  "$DIR/mock.mkv"
+
+# Clean up temporary SRT files
+rm -f "$DIR/spa.srt" "$DIR/eng.srt" "$DIR/und.srt"
+
+echo "Mock MKV generated successfully at $DIR/mock.mkv"

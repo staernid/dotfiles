@@ -1,0 +1,3 @@
+#!/bin/sh
+windows_entry="$(awk -F\' '/menuentry / {print $2}' /boot/grub/grub.cfg | grep Windows | head -1)"
+sudo grub-reboot "$windows_entry" && qdbus6 org.kde.LogoutPrompt /LogoutPrompt promptReboot

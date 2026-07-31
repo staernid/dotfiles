@@ -31,7 +31,6 @@ instances.json
 # Important oddities of this config #
 **/waybar/style.css
 
-scripts/
 dotfile.conf
 *.link
 #####################################

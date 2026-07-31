@@ -1,0 +1,2 @@
+#!/bin/sh
+sudo usbreset "Cooler Master Mice Dongle"

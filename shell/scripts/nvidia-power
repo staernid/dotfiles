@@ -1,0 +1,42 @@
+#!/bin/bash
+
+_gpus="0000:10:00.0 0000:21:00.0"
+
+_check_if_powered() {
+	if nvidia-smi drain -p $1 -q | grep 'not draining'; then
+		printf "TRANSLATION: Powered on.\n\n"
+		return 0
+	else
+		printf "TRANSLATION: Powered off (or not found).\n\n"
+		return 1
+	fi
+}
+
+_set_power() {
+	echo "Turning GPU ($1) power $cmd$([ $UID = 0 ] || printf ' (NOT ROOT!)'):"
+	nvidia-smi drain -p $1 -m "$power" >/dev/null && echo Success. || echo Failed.
+}
+
+cmd="$@"
+case "$@" in
+status | state | check)
+	printf "DISCLAIMER: GPUs can't be detected until you turn them back on\n\n"
+	for gpu in $_gpus; do _check_if_powered $gpu; done
+	;;
+on | poweron | power_on)
+	power=0
+	for gpu in $_gpus; do _set_power $gpu; done
+	;;
+off | poweroff | power_off)
+	printf "DISCLAIMER: GPUs can't be detected until you turn them back on\n...\n"
+	power=1
+	for gpu in $_gpus; do _set_power $gpu; done
+	;;
+*)
+	echo Missing action...
+	echo Usage: nvidia-power [ status / on / off ]
+	echo Running "nvidia-smi"...
+	echo
+	nvidia-smi
+	;;
+esac

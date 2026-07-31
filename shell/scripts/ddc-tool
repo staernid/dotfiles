@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# Description: Advanced DDC control for monitor brightness and contrast
+# Requires: ddcutil i2c-tools
+#
+# This script has been reworked to use the enhanced error trapping and
+# logging functions from the provided _utils script.
+#
+# Load utilities
+source "$(dirname "$0")/_utils" || {
+  log_error "Failed to load utilities"
+  exit 1
+}
+
+# DDC feature codes
+BRIGHTNESS=10
+CONTRAST=12
+MAX_VALUE=100
+MIN_VALUE=0
+
+# Configuration
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ddc"
+DISPLAYS_FILE="$CONFIG_DIR/displays"
+LOG_FILE="$CONFIG_DIR/ddc.log"
+
+# Initialize configuration directory
+mkdir -p "$CONFIG_DIR"
+
+# Main functions
+detect_displays() {
+  log_info "Detecting displays..."
+  local displays
+
+  displays=$(sudo ddcutil detect | awk '
+  /^Display/ {
+    display_num = $2
+    is_valid = 1  # Assume valid until proven otherwise
+    next
+  }
+/Invalid display|This is a laptop display|DRM_connector.*eDP/ {
+  is_valid = 0
+}
+/DRM_connector:/ && is_valid {
+  print display_num
+  # Reset for next display
+  is_valid = 0
+}
+')
+
+  if [ -z "$displays" ]; then
+    log_error "No displays detected"
+    return 1
+  fi
+
+  echo "$displays" >"$DISPLAYS_FILE"
+  log_success "Saved displays to config"
+  log_info "Detected displays: $displays"
+}
+
+get_current_values() {
+  local display=$1
+  log_info "Display $display current values:"
+  sudo ddcutil --display="$display" getvcp $BRIGHTNESS $CONTRAST |
+    awk '/Brightness/ {print "  Brightness:", $9} /Contrast/ {print "  Contrast:", $9}'
+}
+
+set_display_value() {
+  local display=$1 feature=$2 value=$3
+  local feature_name
+
+  case $feature in
+  $BRIGHTNESS) feature_name="Brightness" ;;
+  $CONTRAST) feature_name="Contrast" ;;
+  *) feature_name="Feature $feature" ;;
+  esac
+
+  if ! sudo ddcutil --sleep-multiplier=0.1 --noverify --skip-ddc-checks --display="$display" setvcp "$feature" "$value" >>"$LOG_FILE" 2>&1; then
+    log_error "Failed to set $feature_name on display $display to $value"
+    return 1
+  fi
+  log_success "Set $feature_name on display $display to $value"
+}
+
+set_all_displays() {
+  local feature=$1 value=$2
+  local displays
+
+  if [ ! -f "$DISPLAYS_FILE" ]; then
+    log_error "No displays config found. Run 'detect' first."
+    return 1
+  fi
+
+  displays=$(cat "$DISPLAYS_FILE")
+  if [ -z "$displays" ]; then
+    log_error "No displays configured. Run 'detect' first."
+    return 1
+  fi
+
+  for display in $displays; do
+    set_display_value "$display" "$feature" "$value" &
+  done
+  wait
+}
+
+show_help() {
+  # The new _utils uses color variables, so we use printf to apply them manually
+  printf "%sDDC Monitor Control Tool%s\n" "${G_GREEN}" "${G_NC}"
+  echo "Usage: $(basename "${BASH_SOURCE[0]}") [command] [options]"
+  echo ""
+  echo "Commands:"
+  echo "  detect              Detect and save connected displays"
+  echo "  list                List saved displays and their current values"
+  echo "  brightness [value]  Set brightness (0-100)"
+  echo "  contrast [value]    Set contrast (0-100)"
+  echo "  set [brightness] [contrast] Set both brightness and contrast"
+  echo "  get                 Get current brightness and contrast for all displays"
+  echo "  help                Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  $(basename "${BASH_SOURCE[0]}") detect"
+  echo "  $(basename "${BASH_SOURCE[0]}") brightness 80"
+  echo "  $(basename "${BASH_SOURCE[0]}") set 70 60"
+  echo "  $(basename "${BASH_SOURCE[0]}") get"
+}
+
+validate_value() {
+  local value=$1
+  if ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -lt $MIN_VALUE ] || [ "$value" -gt $MAX_VALUE ]; then
+    log_error "Value must be between $MIN_VALUE and $MAX_VALUE"
+    return 1
+  fi
+  return 0
+}
+
+main() {
+  local command=$1
+  shift || true
+
+  case "$command" in
+  detect)
+    detect_displays
+    ;;
+  list | get)
+    if [ ! -f "$DISPLAYS_FILE" ]; then
+      log_error "No displays config found. Run 'detect' first."
+      return 1
+    fi
+    for display in $(cat "$DISPLAYS_FILE"); do
+      get_current_values "$display"
+    done
+    ;;
+  brightness)
+    local value=$1
+    validate_value "$value" || exit 1
+    set_all_displays $BRIGHTNESS "$value"
+    ;;
+  contrast)
+    local value=$1
+    validate_value "$value" || exit 1
+    set_all_displays $CONTRAST "$value"
+    ;;
+  set)
+    local brightness=$1 contrast=$2
+    validate_value "$brightness" || exit 1
+    validate_value "$contrast" || exit 1
+    set_all_displays $BRIGHTNESS "$brightness"
+    set_all_displays $CONTRAST "$contrast"
+    ;;
+  help | --help | -h)
+    show_help
+    ;;
+  *)
+    log_error "Unknown command: $command"
+    show_help
+    exit 1
+    ;;
+  esac
+}
+
+# Entry point
+if [ $# -eq 0 ]; then
+  show_help
+  exit 0
+fi
+
+main "$@"
+

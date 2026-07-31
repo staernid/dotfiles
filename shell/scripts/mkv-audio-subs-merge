@@ -1,0 +1,739 @@
+#!/bin/bash
+# USAGE: See help (-h/--help)
+
+# Color Definitions
+if [[ -t 1 ]] && command -v tput >/dev/null && tput setaf 1 >/dev/null 2>&1; then
+    G_NC=$(tput sgr0)
+    G_RED=$(tput setaf 1)
+    G_GREEN=$(tput setaf 2)
+    G_YELLOW=$(tput setaf 3)
+    G_BLUE=$(tput setaf 4)
+    G_BOLD=$(tput bold)
+else
+    G_NC=""
+    G_RED=""
+    G_GREEN=""
+    G_YELLOW=""
+    G_BLUE=""
+    G_BOLD=""
+fi
+
+log_info() {
+    printf "%s[INFO]%s %s\n" "${G_BLUE}" "${G_NC}" "$*"
+}
+
+log_success() {
+    printf "%s[SUCCESS]%s %s\n" "${G_GREEN}" "${G_NC}" "$*"
+}
+
+log_warn() {
+    printf "%s[WARN]%s %s\n" "${G_YELLOW}" "${G_NC}" "$*"
+}
+
+log_error() {
+    printf "%s[ERROR]%s %s\n" "${G_RED}" "${G_NC}" "$*" >&2
+}
+
+show_help() {
+    cat << EOF
+${G_BOLD}mkv-audio-subs-merge${G_NC} - Reworked MKV Track Extraction and Merging Tool
+
+${G_BOLD}USAGE:${G_NC}
+  $0 [options] <single_source_to_prune>
+      Strips the video track from the source file, keeping selected/all audio and subtitle tracks.
+
+  $0 [options] <extra_tracks_source> <video_target>
+      Merges audio and subtitle tracks from the extra source into the video target.
+
+  $0 -b/--batch [options] <file1> [file2 ...] [directory1 ...]
+      Batch processes multiple files (and expands directories) to strip their video tracks,
+      keeping selected/all audio and subtitle tracks.
+
+${G_BOLD}OPTIONS:${G_NC}
+  -b, --batch             Enable batch mode to process multiple files/directories.
+  -l, --lang <langs>      Comma-separated list of 3-letter target languages (e.g., "spa", "spa,lat").
+                          - Matches are kept automatically.
+                          - Other known languages are discarded automatically.
+                          - Unknown languages ("und") ring the terminal bell and prompt for manual decision.
+                          - Non-interactive for all other tracks.
+  -o, --output-dir <dir>  Save output files in the specified directory instead of next to the inputs.
+  -f, --force             Overwrite output files if they already exist without prompting.
+  -h, --help              Show this help message and exit.
+
+${G_BOLD}EXAMPLES:${G_NC}
+  # Prune a single file interactively:
+  $0 movie.mkv
+
+  # Merge tracks from two files interactively:
+  $0 audio_source.mkv video_target.mkv
+
+  # Batch strip video from a list of files, keeping only Spanish and English tracks:
+  $0 -b -l "spa,eng" file1.mkv file2.mkv
+
+  # Batch strip video from all files in a folder, keeping only Spanish, asking for unknown tracks:
+  $0 -b -l "spa" ./my_movies/
+EOF
+}
+
+# Helper to check if we can read from a controlling terminal /dev/tty
+can_read_tty() {
+    if { true < /dev/tty; } 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+# Helper to check if selection keeps all tracks of a given type
+is_keeping_all_tracks() {
+    local type="$1"
+    local selection="$2"
+    local info="$3"
+    
+    local total_count
+    total_count=$(echo "$info" | jq -r --arg type "$type" '[.tracks[] | select(.type == $type)] | length')
+    
+    [ "$total_count" -eq 0 ] && return 0
+    [ "$selection" = "all" ] && return 0
+    [ "$selection" = "none" ] && return 1
+    
+    local selected_count
+    selected_count=$(echo "$selection" | tr ',' '\n' | grep -c '[0-9]')
+    
+    if [ "$selected_count" -eq "$total_count" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Helper to check if a file has no video and all tracks match target languages
+is_already_clean() {
+    local info="$1"
+    
+    local video_count
+    video_count=$(echo "$info" | jq -r '[.tracks[] | select(.type == "video")] | length')
+    [ "$video_count" -ne 0 ] && return 1
+    [ -z "$LANGS_ARG" ] && return 1
+    
+    local target_langs=()
+    IFS=',' read -r -a raw_langs <<< "${LANGS_ARG}"
+    for lang in "${raw_langs[@]}"; do
+        lang=$(echo "$lang" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+        [ -n "$lang" ] && target_langs+=("$lang")
+    done
+    
+    local tracks_json
+    tracks_json=$(echo "$info" | jq -c '.tracks[] | select(.type == "audio" or .type == "subtitles")')
+    [ -z "$tracks_json" ] && return 0
+    
+    while read -r track; do
+        [ -z "$track" ] && continue
+        local lang=$(echo "$track" | jq -r '.properties.language // "und"')
+        local lang_lower=$(echo "$lang" | tr '[:upper:]' '[:lower:]')
+        
+        if [[ -z "$lang_lower" || "$lang_lower" == "und" || "$lang_lower" == "undetermined" ]]; then
+            return 1
+        fi
+        
+        local matched=false
+        for target in "${target_langs[@]}"; do
+            if [ "$lang_lower" == "$target" ]; then
+                matched=true
+                break
+            fi
+        done
+        
+        if ! $matched; then
+            return 1
+        fi
+    done <<< "$tracks_json"
+    
+    return 0
+}
+
+# Requirement Checks
+for cmd in mkvmerge jq; do
+    if ! command -v "$cmd" &> /dev/null; then
+        log_error "$cmd is not installed. Please install it first."
+        exit 1
+    fi
+done
+
+# Initialize Options
+BATCH_MODE=false
+LANGS_ARG=""
+OUTPUT_DIR=""
+FORCE_OVERWRITE=false
+FILES=()
+
+# Option Parsing
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -b|--batch)
+            BATCH_MODE=true
+            shift
+            ;;
+        -l|--lang|--languages)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                log_error "$1 option requires a comma-separated list of languages (e.g., spa)."
+                exit 1
+            fi
+            LANGS_ARG="$2"
+            shift 2
+            ;;
+        -o|--output-dir)
+            if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+                log_error "$1 option requires a directory path."
+                exit 1
+            fi
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        -f|--force)
+            FORCE_OVERWRITE=true
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -*)
+            log_error "Unknown option: $1"
+            echo "Use -h or --help for usage instructions." >&2
+            exit 1
+            ;;
+        *)
+            FILES+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [ -n "$OUTPUT_DIR" ] && [ ! -d "$OUTPUT_DIR" ]; then
+    log_error "Output directory does not exist: $OUTPUT_DIR"
+    exit 1
+fi
+
+# Expand file lists (especially for batch mode)
+EXPANDED_FILES=()
+for f in "${FILES[@]}"; do
+    if [ -d "$f" ]; then
+        # Find files in directory (Matroska, MP4, etc.)
+        while IFS= read -r -d '' sub_file; do
+            bn=$(basename "$sub_file")
+            # Skip previously generated output files to prevent infinite loops/redundancy
+            if [[ "$bn" == *-extracted.mkv || "$bn" == *-merged.mkv ]]; then
+                continue
+            fi
+            EXPANDED_FILES+=("$sub_file")
+        done < <(find "$f" -maxdepth 1 -type f \( -name "*.mkv" -o -name "*.mp4" -o -name "*.webm" -o -name "*.mka" \) -print0 | sort -z)
+    elif [ -f "$f" ]; then
+        EXPANDED_FILES+=("$f")
+    else
+        log_error "File or directory not found: $f"
+        exit 1
+    fi
+done
+
+# Check if any input files were found/provided
+if [ ${#EXPANDED_FILES[@]} -eq 0 ]; then
+    log_error "No input files specified."
+    show_help
+    exit 1
+fi
+
+# Automatically enable batch mode if there are more than 2 files
+if [ "$BATCH_MODE" = false ] && [ ${#EXPANDED_FILES[@]} -gt 2 ]; then
+    log_warn "More than 2 files provided. Automatically enabling batch mode."
+    BATCH_MODE=true
+fi
+
+# Helper functions for track selection
+get_track_selection() {
+    local file="$1"
+    local type="$2"
+    local label="$3"
+    local info="$4"
+    
+    # Check if there are tracks of this type
+    local track_count
+    track_count=$(echo "$info" | jq -r --arg type "$type" '[.tracks[] | select(.type == $type)] | length')
+    if [ "$track_count" -eq 0 ]; then
+        echo "none"
+        return
+    fi
+    
+    echo "--- $label Tracks in $(basename "$file") ---" >&2
+    echo "ID | Language | Codec | Name" >&2
+    echo "---|----------|-------|-----" >&2
+    echo "$info" | jq -r --arg type "$type" '.tracks[] | select(.type == $type) | "\(.id) | \(.properties.language // "und") | \(.codec) | \(.properties.track_name // "N/A")"' >&2
+    echo "" >&2
+    
+    local selection
+    if can_read_tty; then
+        read -p "Enter IDs to KEEP (e.g., 1,2 or press Enter for ALL, 'none' for NONE): " selection < /dev/tty >&2
+    else
+        read -p "Enter IDs to KEEP (e.g., 1,2 or press Enter for ALL, 'none' for NONE): " selection >&2
+    fi
+    [ -z "$selection" ] && selection="all"
+    echo "$selection"
+}
+
+select_tracks_by_lang() {
+    local file="$1"
+    local type="$2"
+    local label="$3"
+    local info="$4"
+    
+    local tracks_json
+    tracks_json=$(echo "$info" | jq -c --arg type "$type" '.tracks[] | select(.type == $type)')
+    
+    if [ -z "$tracks_json" ]; then
+        echo "none"
+        return
+    fi
+    
+    local target_langs=()
+    IFS=',' read -r -a raw_langs <<< "${LANGS_ARG}"
+    for lang in "${raw_langs[@]}"; do
+        lang=$(echo "$lang" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+        [ -n "$lang" ] && target_langs+=("$lang")
+    done
+    
+    echo "--- Auto-filtering $label Tracks in $(basename "$file") (Target: ${LANGS_ARG}) ---" >&2
+    
+    local selected_ids=()
+    local found_langs=()
+    
+    while read -r track; do
+        [ -z "$track" ] && continue
+        
+        local id=$(echo "$track" | jq -r '.id')
+        local lang=$(echo "$track" | jq -r '.properties.language // "und"')
+        local codec=$(echo "$track" | jq -r '.codec')
+        local name=$(echo "$track" | jq -r '.properties.track_name // "N/A"')
+        local lang_lower=$(echo "$lang" | tr '[:upper:]' '[:lower:]')
+        
+        found_langs+=("$lang_lower")
+        
+        if [[ -z "$lang_lower" || "$lang_lower" == "und" || "$lang_lower" == "undetermined" ]]; then
+            # Ring the terminal bell!
+            printf '\a' >&2
+            echo -ne "  ${G_YELLOW}[PROMPT]${G_NC} Track ID $id ($codec" >&2
+            [ "$name" != "N/A" ] && echo -n ", name: $name" >&2
+            echo ") has an UNKNOWN language." >&2
+            
+            local choice
+            while true; do
+                if can_read_tty; then
+                    read -p "           Keep this track? [y/N]: " choice < /dev/tty
+                else
+                    read -p "           Keep this track? [y/N]: " choice
+                fi
+                choice=${choice:-n}
+                case "$choice" in
+                    [yY]*)
+                        selected_ids+=("$id")
+                        echo -e "           -> ${G_GREEN}KEEP${G_NC}" >&2
+                        break
+                        ;;
+                    [nN]*)
+                        echo -e "           -> ${G_RED}DROP${G_NC}" >&2
+                        break
+                        ;;
+                    *)
+                        echo "           Please enter y or n." >&2
+                        ;;
+                esac
+            done
+        else
+            local matched=false
+            for target in "${target_langs[@]}"; do
+                if [ "$lang_lower" == "$target" ]; then
+                    matched=true
+                    break
+                fi
+            done
+            
+            if $matched; then
+                selected_ids+=("$id")
+                echo -e "  ${G_GREEN}[KEEP]${G_NC} Track ID $id: $codec ($lang)" >&2
+            else
+                echo -e "  ${G_RED}[DROP]${G_NC} Track ID $id: $codec ($lang)" >&2
+            fi
+        fi
+    done <<< "$tracks_json"
+    
+    if [ ${#selected_ids[@]} -eq 0 ]; then
+        # Ring the terminal bell!
+        printf '\a' >&2
+        echo "" >&2
+        log_warn "No $label tracks matched target languages '${LANGS_ARG}'." >&2
+        echo "  Available languages in $(basename "$file"): $(IFS=,; echo "${found_langs[*]}")" >&2
+        
+        local choice
+        while true; do
+            if can_read_tty; then
+                read -p "  Select a track manually? [y/N]: " choice < /dev/tty
+            else
+                read -p "  Select a track manually? [y/N]: " choice
+            fi
+            choice=${choice:-n}
+            case "$choice" in
+                [yY]*)
+                    # Fallback to get_track_selection
+                    get_track_selection "$file" "$type" "$label" "$info"
+                    return
+                    ;;
+                [nN]*)
+                    echo "none"
+                    return
+                    ;;
+                *)
+                    echo "  Please enter y or n." >&2
+                    ;;
+            esac
+        done
+    else
+        (IFS=,; echo "${selected_ids[*]}")
+    fi
+}
+
+handle_output_overwrite() {
+    local out_path="$1"
+    if [ -f "$out_path" ] && [ "$FORCE_OVERWRITE" = false ]; then
+        printf '\a'
+        log_warn "Output file already exists: $out_path"
+        local choice
+        while true; do
+            if can_read_tty; then
+                read -p "Overwrite? [y/N]: " choice < /dev/tty
+            else
+                read -p "Overwrite? [y/N]: " choice
+            fi
+            choice=${choice:-n}
+            case "$choice" in
+                [yY]*)
+                    return 0
+                    ;;
+                [nN]*)
+                    return 1
+                    ;;
+                *)
+                    echo "Please enter y or n." >&2
+                    ;;
+            esac
+        done
+    fi
+    return 0
+}
+
+process_file_with_selections() {
+    local file="$1"
+    local output_name="$2"
+    local selected_audio="$3"
+    local selected_subs="$4"
+    
+    if ! FILE_INFO=$(mkvmerge -J "$file" 2>/dev/null); then
+        log_error "Failed to read track info from $file. Skipping."
+        return 1
+    fi
+    
+    # Check if we can skip processing (no video and keeping all tracks)
+    local video_count
+    video_count=$(echo "$FILE_INFO" | jq -r '[.tracks[] | select(.type == "video")] | length')
+    local keep_all_audio=false
+    local keep_all_subs=false
+    is_keeping_all_tracks "audio" "$selected_audio" "$FILE_INFO" && keep_all_audio=true
+    is_keeping_all_tracks "subtitles" "$selected_subs" "$FILE_INFO" && keep_all_subs=true
+    
+    if [ "$video_count" -eq 0 ] && [ "$keep_all_audio" = true ] && [ "$keep_all_subs" = true ]; then
+        local input_dir=$(cd "$(dirname "$file")" && pwd)
+        local output_dir=$(cd "$(dirname "$output_name")" && pwd)
+        
+        if [ "$input_dir" = "$output_dir" ]; then
+            log_success "Skipping: $file (already has no video, all tracks kept, and output is in the same directory)."
+        else
+            log_info "File has no video and all tracks kept. Copying to output directory..."
+            if cp "$file" "$output_name"; then
+                log_success "Saved: $output_name"
+            else
+                log_error "Failed to copy file to $output_name."
+            fi
+        fi
+        return 0
+    fi
+    
+    # Build mkvmerge command
+    local mkv_args=("-o" "$output_name")
+    
+    if [ "$selected_audio" != "all" ]; then
+        if [ "$selected_audio" == "none" ]; then
+            mkv_args+=("--no-audio")
+        else
+            mkv_args+=("--audio-tracks" "$selected_audio")
+        fi
+    fi
+    
+    if [ "$selected_subs" != "all" ]; then
+        if [ "$selected_subs" == "none" ]; then
+            mkv_args+=("--no-subtitles")
+        else
+            mkv_args+=("--subtitle-tracks" "$selected_subs")
+        fi
+    fi
+    
+    mkv_args+=("--no-video" "$file")
+    
+    echo "--------------------------------------------------------"
+    log_info "Executing mkvmerge..."
+    mkvmerge "${mkv_args[@]}"
+    local status=$?
+    
+    if [ $status -eq 0 ] || [ $status -eq 1 ]; then
+        log_success "Saved: $output_name"
+        if [ $status -eq 1 ]; then
+            log_warn "mkvmerge finished with warnings."
+        fi
+    else
+        log_error "mkvmerge failed on $file (Exit Code: $status)."
+    fi
+}
+
+# ==============================================================================
+# Execution Dispatcher
+# ==============================================================================
+
+if [ "$BATCH_MODE" = true ]; then
+    log_info "Running in Batch Mode. Processing ${#EXPANDED_FILES[@]} file(s)..."
+    
+    FILES_TO_PROCESS=()
+    FILES_AUDIO_SELECTION=()
+    FILES_SUBS_SELECTION=()
+    FILES_OUTPUT_NAME=()
+    
+    for file in "${EXPANDED_FILES[@]}"; do
+        echo "========================================================"
+        log_info "Inspecting/Configuring: $file"
+        echo "========================================================"
+        
+        if ! FILE_INFO=$(mkvmerge -J "$file" 2>/dev/null); then
+            log_error "Failed to read track info from $file. Skipping."
+            continue
+        fi
+        
+        # Determine output filename
+        base_name=$(basename "$file")
+        if [ -n "$OUTPUT_DIR" ]; then
+            output_name="$OUTPUT_DIR/${base_name%.*}-extracted.mkv"
+        else
+            output_name="$(dirname "$file")/${base_name%.*}-extracted.mkv"
+        fi
+        
+        # Check if already clean (needs no processing at all)
+        if is_already_clean "$FILE_INFO"; then
+            input_dir=$(cd "$(dirname "$file")" && pwd)
+            output_dir=$(cd "$(dirname "$output_name")" && pwd)
+            
+            if [ "$input_dir" = "$output_dir" ]; then
+                log_success "Skipping: $file (already has no video, all tracks kept, and output is in the same directory)."
+            else
+                log_info "File has no video and all tracks kept. Copying to output directory..."
+                if cp "$file" "$output_name"; then
+                    log_success "Saved: $output_name"
+                else
+                    log_error "Failed to copy file to $output_name."
+                fi
+            fi
+            continue
+        fi
+        
+        # Check overwrite
+        if ! handle_output_overwrite "$output_name"; then
+            log_info "Skipping file: $file"
+            continue
+        fi
+        
+        # Get selections (this might prompt the user)
+        if [ -n "$LANGS_ARG" ]; then
+            selected_audio=$(select_tracks_by_lang "$file" "audio" "Audio" "$FILE_INFO")
+            selected_subs=$(select_tracks_by_lang "$file" "subtitles" "Subtitle" "$FILE_INFO")
+        else
+            selected_audio=$(get_track_selection "$file" "audio" "Audio" "$FILE_INFO")
+            selected_subs=$(get_track_selection "$file" "subtitles" "Subtitle" "$FILE_INFO")
+        fi
+        
+        if [ "$selected_audio" == "none" ]; then
+            log_warn "Skipping: $file (only subtitle tracks selected, no audio tracks to keep)."
+            continue
+        fi
+        
+        # Queue for execution
+        FILES_TO_PROCESS+=("$file")
+        FILES_OUTPUT_NAME+=("$output_name")
+        FILES_AUDIO_SELECTION+=("$selected_audio")
+        FILES_SUBS_SELECTION+=("$selected_subs")
+    done
+    
+    # Process Queued Files
+    if [ ${#FILES_TO_PROCESS[@]} -gt 0 ]; then
+        echo ""
+        log_info "========================================================"
+        log_info "All configurations gathered. Processing ${#FILES_TO_PROCESS[@]} file(s)..."
+        log_info "No further user intervention required."
+        log_info "========================================================"
+        
+        for i in "${!FILES_TO_PROCESS[@]}"; do
+            file="${FILES_TO_PROCESS[$i]}"
+            output_name="${FILES_OUTPUT_NAME[$i]}"
+            selected_audio="${FILES_AUDIO_SELECTION[$i]}"
+            selected_subs="${FILES_SUBS_SELECTION[$i]}"
+            
+            echo "========================================================"
+            log_info "Processing ($((i+1))/${#FILES_TO_PROCESS[@]}): $file"
+            echo "========================================================"
+            
+            process_file_with_selections "$file" "$output_name" "$selected_audio" "$selected_subs"
+        done
+    else
+        log_success "All files processed/skipped successfully."
+    fi
+    exit 0
+
+else
+    # Non-Batch Modes
+    if [ ${#EXPANDED_FILES[@]} -eq 1 ]; then
+        # Mode 1: Single file pruning
+        file="${EXPANDED_FILES[0]}"
+        log_info "Running in Single File Pruning Mode..."
+        
+        if ! FILE_INFO=$(mkvmerge -J "$file" 2>/dev/null); then
+            log_error "Failed to read track info from $file."
+            exit 1
+        fi
+        
+        base_name=$(basename "$file")
+        if [ -n "$OUTPUT_DIR" ]; then
+            output_name="$OUTPUT_DIR/${base_name%.*}-extracted.mkv"
+        else
+            output_name="$(dirname "$file")/${base_name%.*}-extracted.mkv"
+        fi
+        
+        if ! handle_output_overwrite "$output_name"; then
+            log_info "Cancelled."
+            exit 0
+        fi
+        
+        if [ -n "$LANGS_ARG" ]; then
+            selected_audio=$(select_tracks_by_lang "$file" "audio" "Audio" "$FILE_INFO")
+            selected_subs=$(select_tracks_by_lang "$file" "subtitles" "Subtitle" "$FILE_INFO")
+        else
+            selected_audio=$(get_track_selection "$file" "audio" "Audio" "$FILE_INFO")
+            selected_subs=$(get_track_selection "$file" "subtitles" "Subtitle" "$FILE_INFO")
+        fi
+        
+        if [ "$selected_audio" == "none" ]; then
+            log_warn "Cancelled: Only subtitle tracks selected (no audio tracks to keep)."
+            exit 0
+        fi
+        
+        process_file_with_selections "$file" "$output_name" "$selected_audio" "$selected_subs"
+        exit 0
+        
+    elif [ ${#EXPANDED_FILES[@]} -eq 2 ]; then
+        # Mode 2: Merging two files
+        extra_source="${EXPANDED_FILES[0]}"
+        video_target="${EXPANDED_FILES[1]}"
+        log_info "Running in Merging Mode..."
+        
+        if ! EXTRA_INFO=$(mkvmerge -J "$extra_source" 2>/dev/null); then
+            log_error "Failed to read track info from $extra_source."
+            exit 1
+        fi
+        if ! TARGET_INFO=$(mkvmerge -J "$video_target" 2>/dev/null); then
+            log_error "Failed to read track info from $video_target."
+            exit 1
+        fi
+        
+        base_target=$(basename "$video_target")
+        if [ -n "$OUTPUT_DIR" ]; then
+            output_name="$OUTPUT_DIR/${base_target%.*}-merged.mkv"
+        else
+            output_name="$(dirname "$video_target")/${base_target%.*}-merged.mkv"
+        fi
+        
+        if ! handle_output_overwrite "$output_name"; then
+            log_info "Cancelled."
+            exit 0
+        fi
+        
+        log_info "Phase 1: Selecting tracks from VIDEO TARGET ($video_target)"
+        if [ -n "$LANGS_ARG" ]; then
+            target_audio=$(select_tracks_by_lang "$video_target" "audio" "Audio" "$TARGET_INFO")
+            target_subs=$(select_tracks_by_lang "$video_target" "subtitles" "Subtitle" "$TARGET_INFO")
+        else
+            target_audio=$(get_track_selection "$video_target" "audio" "Audio" "$TARGET_INFO")
+            target_subs=$(get_track_selection "$video_target" "subtitles" "Subtitle" "$TARGET_INFO")
+        fi
+        
+        log_info "Phase 2: Selecting tracks from EXTRA SOURCE ($extra_source)"
+        if [ -n "$LANGS_ARG" ]; then
+            extra_audio=$(select_tracks_by_lang "$extra_source" "audio" "Audio" "$EXTRA_INFO")
+            extra_subs=$(select_tracks_by_lang "$extra_source" "subtitles" "Subtitle" "$EXTRA_INFO")
+        else
+            extra_audio=$(get_track_selection "$extra_source" "audio" "Audio" "$EXTRA_INFO")
+            extra_subs=$(get_track_selection "$extra_source" "subtitles" "Subtitle" "$EXTRA_INFO")
+        fi
+        
+        mkv_args=("-o" "$output_name")
+        
+        # Target options
+        if [ "$target_audio" != "all" ]; then
+            if [ "$target_audio" == "none" ]; then
+                mkv_args+=("--no-audio")
+            else
+                mkv_args+=("--audio-tracks" "$target_audio")
+            fi
+        fi
+        if [ "$target_subs" != "all" ]; then
+            if [ "$target_subs" == "none" ]; then
+                mkv_args+=("--no-subtitles")
+            else
+                mkv_args+=("--subtitle-tracks" "$target_subs")
+            fi
+        fi
+        mkv_args+=("$video_target")
+        
+        # Extra source options (with no-video)
+        if [ "$extra_audio" != "all" ]; then
+            if [ "$extra_audio" == "none" ]; then
+                mkv_args+=("--no-audio")
+            else
+                mkv_args+=("--audio-tracks" "$extra_audio")
+            fi
+        fi
+        if [ "$extra_subs" != "all" ]; then
+            if [ "$extra_subs" == "none" ]; then
+                mkv_args+=("--no-subtitles")
+            else
+                mkv_args+=("--subtitle-tracks" "$extra_subs")
+            fi
+        fi
+        mkv_args+=("--no-video" "$extra_source")
+        
+        echo "--------------------------------------------------------"
+        log_info "Executing mkvmerge..."
+        mkvmerge "${mkv_args[@]}"
+        status=$?
+        
+        if [ $status -eq 0 ] || [ $status -eq 1 ]; then
+            log_success "Saved: $output_name"
+            if [ $status -eq 1 ]; then
+                log_warn "mkvmerge finished with warnings."
+            fi
+            exit 0
+        else
+            log_error "mkvmerge failed (Exit Code: $status)."
+            exit $status
+        fi
+    fi
+fi

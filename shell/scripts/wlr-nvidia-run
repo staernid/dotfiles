@@ -1,0 +1,8 @@
+#!/bin/sh
+export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
+export WLR_DRM_DEVICES=$(readlink -f /dev/dri/by-path/pci-0000:10:00.0-card)
+#export WLR_NO_HARDWARE_CURSORS=1
+export GBM_BACKEND=nvidia-drm
+export __GLX_VENDOR_LIBRARY_NAME=nvidia-drm
+export LIBVA_DRIVER_NAME=nvidia
+$@

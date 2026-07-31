@@ -10,7 +10,7 @@ Each top-level directory is a stow package: `ai`, `arch`, `editor`, `kitty`, `me
 
 - `./deploy` — single entry point. Installs stow on first run, stows packages. Pass `-D` to revert.
 - `./provision-secrets` — pulls SSH keys and config secrets from Bitwarden. Pass `-y` to skip prompts.
-- `dotfile.conf` sets `TO_DEPLOY` (which packages to stow). Gitignored; `dotfile.conf.dist` is the template.
+- `./.config` sets `TO_DEPLOY` (which packages to stow). Gitignored; `./config.dist` is the template.
 - Scripts live at `$HOME/scripts` (cloned separately); added to `PATH` via shell profile.
 
 ## Conventions

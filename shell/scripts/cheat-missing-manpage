@@ -1,0 +1,15 @@
+#!/bin/bash
+
+get_manpages(){
+  for page in $(ls /usr/share/man/man1) ; do echo "${page%.*}" ; done | sort
+  unset page
+}
+get_cheatsheets(){
+  for page in $(ls $HOME/.config/cheat/cheatsheets/community/) ; do echo "${page%.*}" ; done | sort
+  unset page
+}
+
+get_manpages > manpgs
+get_cheatsheets > chtsheets
+# comm -12 manpgs chtsheets
+uniq manpgs chtsheets

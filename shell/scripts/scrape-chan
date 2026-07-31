@@ -1,0 +1,16 @@
+#!/bin/bash
+
+CHAN_DOMAINS=${CHAN_DOMAINS-i.4cdn.org,is2.4chan.org}
+directory=${directory-4chan_media}
+
+thread_url="$@"
+
+wget --directory-prefix="$directory" \
+  --no-directories \
+  --recursive \
+  --level 1 \
+  --span-hosts \
+  -D "$CHAN_DOMAINS" \
+  --accept png,gif,jpg,jpeg,webm \
+  --reject '?????????????s*' \
+  "$thread_url"

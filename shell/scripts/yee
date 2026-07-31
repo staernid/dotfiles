@@ -1,0 +1,44 @@
+#!/bin/bash
+
+if [ $(
+  source /etc/os-release
+  echo $NAME
+) = Void ]; then
+  nc() {
+    openbsd-nc $@
+  }
+fi
+
+fn_send() {
+  ip=yee
+  ping -c1 -W1 $ip >/dev/null &&
+    printf "{\"id\":1,$1}\r\n" | nc -q 1 $ip 55443 && return
+  echo "$ip not available"
+}
+
+hsv_set() {
+  fn_send '"method":"set_scene", "params": ["hsv", '$1', '$2', '$3']'
+}
+
+case $1 in
+set | brightness)
+  [ $2 -lt 1 ] && fn_send '"method":"set_power","params":["off", "smooth", 500]' && exit
+  fn_send '"method":"set_power","params":["on","smooth",'200']'
+  fn_send '"method":"set_bright","params":['$2',"smooth",'200']'
+  ;;
+color | hsv)
+  hsv_set "$2" "$3" "$4"
+  ;;
+red)
+  fn_send '"method":"set_scene", "params": ["hsv", 0, 100, '${2:-100}'"]'
+  ;;
+blue)
+  fn_send '"method":"set_scene", "params": ["hsv", 245, 100, '${2:-100}'"]'
+  ;;
+green)
+  fn_send '"method":"set_scene", "params": ["hsv", 125, 100, '${2:-100}'"]'
+  ;;
+*)
+  fn_send '"method":"toggle","params":[,,]'
+  ;;
+esac

@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# deploy — stow dotfile packages into $HOME
+# stow dotfile packages into $HOME
 #
 # First run on a new machine:
 #   git clone <repo> ~/dotfiles && cd dotfiles && ./deploy
 #
-# Re-deploy after edits:  ./deploy
-# Revert (unstow all):    ./deploy -D
-# Extra stow flags:       ./deploy --adopt
+# Re-deploy after edits:  ./deploy.sh
+# Revert (unstow all):    ./deploy.sh -D
+# Extra stow flags:       ./deploy.sh --adopt
 #
 # Configuration:
-#   Edit dotfile.conf to choose which packages to stow.
+#   Edit config to choose which packages to stow.
 #   Available packages: ai arch editor kitty media secrets shell ssh sway zsh
 
 set -euo pipefail
@@ -23,36 +23,46 @@ export XDG_CONFIG_HOME
 
 # ── Distro detection ─────────────────────────
 detect_distro() {
-  if [[ -n "${TERMUX_VERSION:-}" ]]; then echo termux; return; fi
-  if [[ ! -f /etc/os-release ]]; then echo unknown; return; fi
+  if [[ -n "${TERMUX_VERSION:-}" ]]; then
+    echo termux
+    return
+  fi
+  if [[ ! -f /etc/os-release ]]; then
+    echo unknown
+    return
+  fi
   . /etc/os-release
   case "${ID:-} ${ID_LIKE:-}" in
-    arch*|*arch*)     echo arch ;;
-    fedora*|*fedora*) echo fedora ;;
-    debian*|*debian*|ubuntu*|*ubuntu*) echo debian ;;
-    *) echo unknown ;;
+  arch* | *arch*) echo arch ;;
+  fedora* | *fedora*) echo fedora ;;
+  debian* | *debian* | ubuntu* | *ubuntu*) echo debian ;;
+  *) echo unknown ;;
   esac
 }
 
 install_pkg() {
-  local distro="$1"; shift
+  local distro="$1"
+  shift
   case "$distro" in
-    termux) pkg install -y "$@" ;;
-    arch)   sudo pacman -S --noconfirm --needed "$@" ;;
-    fedora) sudo dnf install -y "$@" ;;
-    debian) sudo apt-get update -qq && sudo apt-get install -y "$@" ;;
-    *)      echo "Unknown distro — install manually: $*"; return 1 ;;
+  termux) pkg install -y "$@" ;;
+  arch) sudo pacman -S --noconfirm --needed "$@" ;;
+  fedora) sudo dnf install -y "$@" ;;
+  debian) sudo apt-get update -qq && sudo apt-get install -y "$@" ;;
+  *)
+    echo "Unknown distro — install manually: $*"
+    return 1
+    ;;
   esac
 }
 
 # ── Config ────────────────────────────────────
-if [[ ! -f dotfile.conf ]]; then
-  cp dotfile.conf.dist dotfile.conf
-  echo "Created dotfile.conf from template."
+if [[ ! -f config ]]; then
+  cp config.dist config
+  echo "Created ./config from template."
 fi
 
-# shellcheck source=dotfile.conf.dist
-. ./dotfile.conf
+# shellcheck source=config.dist
+. ./config
 
 # ── First-run: install stow + zsh deps ───────
 DISTRO="$(detect_distro)"

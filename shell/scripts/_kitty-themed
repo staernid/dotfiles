@@ -1,0 +1,5 @@
+#!/bin/sh
+kitty \
+  -c $XDG_CONFIG_HOME/kitty/theme.link \
+  -c $XDG_CONFIG_HOME/kitty/kitty.conf \
+  "$@"

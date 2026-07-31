@@ -1,0 +1,36 @@
+#!/bin/bash
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+declare -A MANIFEST_PATHS=(
+  ["Default"]="$HOME/.local/share/Steam/steamapps"
+  ["SSD"]="/mnt/*/SteamLibrary/steamapps"
+)
+
+display_path_list() {
+  shopt -s nullglob
+
+  for steam_path in "${!MANIFEST_PATHS[@]}"; do
+    manifest_glob="${MANIFEST_PATHS[$steam_path]//\{ANYPATHHERE\/*/}"
+
+    echo -e "${RED}Steam Prefix: ${MANIFEST_PATHS[$steam_path]}:${NC}\n"
+
+    for file in $manifest_glob/appmanifest_*.acf; do
+      appid=$(awk -F'"' '/"appid"[[:space:]]+"[0-9]+"/ {print $4}' "$file")
+      name=$(awk -F'"' '/"name"[[:space:]]+"[^"]+"/ {print $4}' "$file")
+
+      if [[ -n "$appid" && -n "$name" ]]; then
+        echo -e "Game: $name"
+        echo -e "${BLUE}Prefix${NC}: $(dirname "$file")/compatdata/$appid"
+        echo -e "${GREEN}Prefix User${NC}: $(dirname "$file")/compatdata/$appid/pfx/drive_c/users/steamuser\n"
+      fi
+    done
+  done
+
+  shopt -u nullglob
+}
+
+display_path_list

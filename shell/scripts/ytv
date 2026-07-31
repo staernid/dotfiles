@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Check for YouTube URL argument
+if [ -z "$1" ]; then
+  echo "Usage: $0 <YouTube URL>"
+  exit 1
+fi
+
+yt_link="$1"
+
+# Video quality selection
+echo -e "\nSelect video quality:"
+echo "1. 360p"
+echo "2. 480p"
+echo "3. 720p"
+echo "4. 1080p"
+echo "5. 1440p"
+echo "6. 2160p"
+echo "Press Enter for 720p (default)"
+
+read -n 1 -s -r quality_key
+
+# Determine the format based on key press
+case $quality_key in
+1) format="bv*[height<=360]+ba/b" ;;
+2) format="bv*[height<=480]+ba/b" ;;
+3) format="bv*[height<=720]+ba/b" ;;
+4) format="bv*[height<=1080]+ba/b" ;;
+5) format="bv*[height<=1440]+ba/b" ;;
+6) format="bv*[height<=2160]+ba/b" ;;
+*) format="bv*[height<=720]+ba/b" ;; # Default to 720p
+esac
+
+# Sponsorblock selection
+echo -e "\nEnable sponsorblock? (Y/n, default Y)"
+read -n 1 -s -r sponsor_key
+
+# Handle sponsorblock option
+if [[ $sponsor_key == [Yy] || $sponsor_key == $'\n' ]]; then
+  sponsorblock="--sponsorblock-remove default"
+else
+  sponsorblock=""
+fi
+
+# Execute the command
+yt-dlp --default-search "ytsearch" -o - --downloader ffmpeg -f "$format" $sponsorblock "$yt_link" | mpv -

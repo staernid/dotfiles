@@ -1,0 +1,3 @@
+#!/bin/sh
+export WLR_DRM_DEVICES=$(readlink -f /dev/dri/by-path/pci-0000:30:00.0-card)
+$@

@@ -1,15 +1,14 @@
 #!/bin/bash
 
-# provision-secrets — pull SSH keys and config secrets from Bitwarden
+# pull SSH keys and config secrets from Bitwarden
 #
 # Prerequisites:
-#   1. Deploy the secrets package first (./deploy) — it stows a bw wrapper
-#      at ~/.local/bin/bw that auto-downloads the Bitwarden CLI on first use.
-#   2. Log in: bw login
+#   1. Deploy shell package (it stows the bw wrapper)
+#   1. Log in: bw login
 #
 # Usage:
-#   ./provision-secrets          interactive (prompts before overwriting)
-#   ./provision-secrets -y       overwrite without prompting
+#   ./provision-secrets.sh          interactive (prompts before overwriting)
+#   ./provision-secrets.sh -y       overwrite without prompting
 #
 # Bitwarden naming conventions:
 #   dotfiles/ssh/<name>       → ~/.ssh/<name>         (SSH key item)
@@ -36,16 +35,16 @@ BW_SESSION="${BW_SESSION:-}"
 _status() { "$BW" status | jq -r '.status'; }
 
 case "$(_status)" in
-  unauthenticated)
-    echo "Not logged in. Run: bw login"
-    exit 1
-    ;;
-  locked)
-    echo "Vault locked. Unlocking..."
-    BW_SESSION="$("$BW" unlock --raw)"
-    export BW_SESSION
-    ;;
-  unlocked) ;;
+unauthenticated)
+  echo "Not logged in. Run: bw login"
+  exit 1
+  ;;
+locked)
+  echo "Vault locked. Unlocking..."
+  BW_SESSION="$("$BW" unlock --raw)"
+  export BW_SESSION
+  ;;
+unlocked) ;;
 esac
 
 list() { "$BW" list items --search "$1" | jq -c '.[]'; }
@@ -58,12 +57,15 @@ safe_write() {
   if [[ -f "$target" ]] && ! $FORCE; then
     read -r -p "  Overwrite $label? [y/N] " reply
     case "$reply" in
-      [yY]|[yY]es) ;;
-      *) echo "  Skip   $label"; return 1 ;;
+    [yY] | [yY]es) ;;
+    *)
+      echo "  Skip   $label"
+      return 1
+      ;;
     esac
   fi
   mkdir -p "$(dirname "$target")"
-  printf '%s\n' "$content" > "$target"
+  printf '%s\n' "$content" >"$target"
   echo "  Wrote  $label"
 }
 
@@ -81,7 +83,7 @@ while IFS= read -r item; do
 
   if [[ -n "$priv" || -n "$pub" ]]; then
     [[ -n "$priv" ]] && safe_write "$HOME/.ssh/$key_name" "$priv" "~/.ssh/$key_name" && written=$((written + 1))
-    [[ -n "$pub" ]]  && safe_write "$HOME/.ssh/$key_name.pub" "$pub" "~/.ssh/$key_name.pub" && written=$((written + 1))
+    [[ -n "$pub" ]] && safe_write "$HOME/.ssh/$key_name.pub" "$pub" "~/.ssh/$key_name.pub" && written=$((written + 1))
   elif [[ -n "$notes" ]]; then
     safe_write "$HOME/.ssh/$key_name" "$notes" "~/.ssh/$key_name (from notes)" && written=$((written + 1))
   else

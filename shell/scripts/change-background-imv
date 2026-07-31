@@ -1,0 +1,23 @@
+#!/bin/sh
+# Change the pape of active output by fuzzyfinding in a pape folder
+# also notify about the change
+set -xe
+# Determine active output display
+[ "$XDG_CURRENT_DESKTOP" = "sway" ] &&
+  output=$(swaymsg -p -t get_outputs | grep focused | awk '{print $2}')
+
+# fuzzy find a pape from folder
+chosen=$(find ~/media/pictures/wallpapers-master -type f | shuf | imv -f -s crop)
+[ "$XDG_CURRENT_DESKTOP" = "Hyprland" ] &&
+  output=$(hyprctl monitors -j | jq 'select(.[].focused == true)' | jq '.[].name' -r)
+
+# shuffle wallpapers from folder and pipe to imv
+
+# Copy to persistent file
+mkdir -p .cache/wallpapers
+cp "$chosen" ".cache/wallpapers/$output"
+
+# Set pape to that file
+swww img --transition-type random --resize crop .cache/wallpapers/"$output"
+
+rm "$HOME/.cache/wallpapers/$output-backup"

@@ -1,0 +1,24 @@
+#!/bin/sh -x
+
+FIRST_SEAT=seat0
+SECOND_SEAT=seat1
+
+# Some usb hub?
+#sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:02.1/0000:16:00.0/usb1/1-5/1-5.2
+
+# 3060 (upper pcie)
+#sudo loginctl attach $second_seat /sys/devices/pci0000:00/0000:00:08.1/0000:30:00.0/drm/card1
+#sudo loginctl attach $second_seat /sys/devices/pci0000:00/0000:00:08.1/0000:30:00.1/sound/card1
+# Probably not needed:
+#sudo loginctl attach $second_seat /sys/devices/pci0000:00/0000:00:08.1/0000:30:00.0/graphics/fb1
+
+# 2060s (lower pcie)
+#sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:02.1/0000:16:00.2/0000:20:00.0/0000:21:00.0/drm/card*
+#sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:02.1/0000:16:00.2/0000:20:00.0/0000:21:00.1/sound/card*
+#sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:02.1/0000:16:00.2/0000:20:00.0/0000:21:00.2/usb*
+#sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:02.1/0000:16:00.2/0000:20:00.0/0000:21:00.3/i2c-*
+sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:01.1/0000:10:00.0/drm/card*
+sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:01.1/0000:10:00.0/graphics/fb*
+sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:01.1/0000:10:00.1/sound/card0
+#sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:01.1/0000:10:00.2/usb*
+#sudo loginctl attach $SECOND_SEAT /sys/devices/pci0000:00/0000:00:01.1/0000:10:00.0/i2c-*

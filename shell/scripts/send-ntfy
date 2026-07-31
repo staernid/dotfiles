@@ -1,0 +1,118 @@
+#!/bin/bash
+set -e
+# Help function
+show_help() {
+  cat <<EOF
+Usage: $0 [OPTIONS] MESSAGE
+
+Send a notification via ntfy.sh
+
+Options:
+  -c, --config FILE    Configuration file (default: ~/.ntfy or \$CONFIG)
+  -s, --server URL     Ntfy server URL (default: first line of config or \$SERVER)
+  -t, --topic TOPIC    Topic to publish to (default: second line of config or \$TOPIC)
+  -k, --token TOKEN    Access token (default: last line of config or \$TOKEN)
+  --tags TAGS          Tags for notification (comma-separated, default: computer or \$TAGS)
+  --title TITLE        Notification title (default: Alert or \$TITLE)
+  -p, --priority PRIO  Priority (1-5, default: 3 or \$PRIORITY)
+  --delay DELAY        Delay delivery until specific time (timestamp)
+  --actions ACTIONS    Notification actions (JSON format)
+  -h, --help           Show this help message
+
+Environment variables can be used instead of flags and take precedence.
+EOF
+  exit 0
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  -c | --config)
+    CONFIG="$2"
+    shift 2
+    ;;
+  -s | --server)
+    SERVER="$2"
+    shift 2
+    ;;
+  -t | --topic)
+    TOPIC="$2"
+    shift 2
+    ;;
+  -k | --token)
+    TOKEN="$2"
+    shift 2
+    ;;
+  --tags)
+    TAGS="$2"
+    shift 2
+    ;;
+  --title)
+    TITLE="$2"
+    shift 2
+    ;;
+  -p | --priority)
+    PRIORITY="$2"
+    shift 2
+    ;;
+  --delay)
+    DELAY="$2"
+    shift 2
+    ;;
+  --actions)
+    ACTIONS="$2"
+    shift 2
+    ;;
+  -h | --help)
+    show_help
+    ;;
+  *)
+    # First non-option argument is treated as the message
+    if [[ -z "$MESSAGE" ]]; then
+      MESSAGE="$1"
+      shift
+    else
+      echo "Error: Unknown option or too many arguments: $1" >&2
+      exit 1
+    fi
+    ;;
+  esac
+done
+
+# Default values
+CONFIG=${CONFIG-$HOME/.ntfy}
+SERVER=${SERVER-$(head -n1 "$CONFIG" 2>/dev/null || true)}
+TOPIC=${TOPIC-$(head -n2 "$CONFIG" 2>/dev/null | tail -n1 || true)}
+TOKEN=${TOKEN-$(tail -n1 "$CONFIG" 2>/dev/null || true)}
+TAGS=${TAGS-computer}
+TITLE=${TITLE-Alert}
+PRIORITY=${PRIORITY-3}
+DELAY=${DELAY-}
+ACTIONS=${ACTIONS-}
+
+send_ntfy() {
+  local curl_args=(
+    "-H" "Authorization: Bearer $TOKEN"
+    "-H" "Tags: $TAGS"
+    "-H" "Title: $TITLE"
+    "-H" "X-Priority: $PRIORITY"
+  )
+
+  # Only add Delay header if DELAY is set
+  [[ -n "$DELAY" ]] && curl_args+=("-H" "Delay: $DELAY")
+
+  # Only add Actions header if ACTIONS is set
+  [[ -n "$ACTIONS" ]] && curl_args+=("-H" "Actions: $ACTIONS")
+
+  curl "${curl_args[@]}" -d "$@" "$SERVER/$TOPIC"
+}
+
+# If not sourced and no help requested, send notification
+if [[ "${BASH_SOURCE[0]}" == "$0" ]] && [[ "$1" != "-h" && "$1" != "--help" ]]; then
+  if [[ -z "$MESSAGE" ]]; then
+    echo "Error: Message content is required" >&2
+    show_help
+    exit 1
+  fi
+  send_ntfy "$MESSAGE"
+fi

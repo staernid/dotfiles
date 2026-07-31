@@ -1,0 +1,354 @@
+#!/usr/bin/env bash
+# vi: set foldmethod=indent :
+set -e # Exit immediately if a command exits with a non-zero status.
+parent_path=$(
+  cd "$(dirname "${BASH_SOURCE[0]}")"
+  pwd -P
+)
+
+############################
+#         Defaults         #
+# Default mount point directory.
+MNT=${MNT-./tmpmnt}
+# Default image variable.
+img=${img-}
+############################
+
+# Source utility functions from _utils.
+
+source $parent_path/_utils
+
+# help_msg: Displays the help message for the script.
+help_msg() {
+  echo "Description:
+  Various tools for working with Linux images. See usage;
+  Usage:
+    $TOOL_NAME <COMMAND> <*ARGS> [--help, -h]
+  Commands:
+    $TOOL_NAME mount_full_image <raw full image>
+    $TOOL_NAME mount_root_image <raw image of partition>
+    $TOOL_NAME umount []
+    $TOOL_NAME dd <image> </dev/disk/by-id/disk>
+    $TOOL_NAME loop <image>
+    $TOOL_NAME loop_release
+    $TOOL_NAME compress <compression_type> <image_file> <block_device>
+    $TOOL_NAME decompress <compression_type> <image_file> <block_device>
+  "
+}
+
+# check_mount: Checks if a given directory is currently mounted.
+# Arguments:
+#   $1: The directory path to check.
+# Returns:
+#   0 if mounted, 1 otherwise.
+check_mount() {
+  sudo df | grep "$1" &>/dev/null
+  return $?
+}
+
+# check_is_dev: Checks if a given path refers to a block device or character device.
+# Arguments:
+#   $1: The first path to check.
+#   $2: The second path to check.
+# Uses the 'check' function from _utils for reporting.
+check_is_dev() {
+  local msg="check if one of: $@ is blockdevice/chardevice"
+  # Use file command to determine file type.
+  (file -Li "$1" "$2" | grep -e blockdevice -e chardevice) || check "$msg" ee
+  check "$msg" ok
+}
+
+# tofrom_blockdev: Writes data from a source file to a block device.
+# Arguments:
+#   $1: Source file (e.g., image).
+#   $2: Destination block device.
+tofrom_blockdev() {
+  echo "Write: $1 to $2"
+  echo "Please wait - This takes some time"
+  check_is_dev "$1" "$2" # Check if arguments are devices
+  local msg="write: $1 to $2"
+  # Use generic_dd from _utils for the actual copy operation.
+  $generic_dd if="$1" of="$2" || check "$msg" ee
+  check "$msg" ok
+  # The commented-out section seems to be for a loop device check, not relevant here.
+  #echo "Please remove the device ($BLOCKDEV - $img)"
+  #while [ -e "$BLOCKDEV""-part1" ]; do
+  #	sleep 1
+  #done
+  #echo "$BLOCKDEV ejected..."
+}
+
+# _tmp_mntdir: Creates a temporary mount directory.
+# Exports MNT with the path to the new temporary directory.
+# Returns:
+#   The path to the created temporary directory.
+_tmp_mntdir() {
+  mkdir -p ./tmpmnt
+  # Create a temporary directory within ./tmpmnt.
+  export MNT=$(mktemp -d -t img-XXXX --tmpdir=tmpmnt)
+  echo "$MNT"
+}
+
+# _clean_tmp_mntdir: Cleans up temporary mount directories.
+# Unmounts and removes directories within ./tmpmnt.
+_clean_tmp_mntdir() {
+  # Unmount all mounted filesystems within ./tmpmnt recursively and quietly.
+  sudo umount -RAq ./tmpmnt/*
+  # Remove the mount point directories.
+  sudo rmdir ./tmpmnt/*
+}
+
+# umount_image: Unmounts the image and releases loop devices.
+# Arguments:
+#   MNT: The mount point directory (defaults to the exported MNT).
+umount_image() {
+  local msg="unmount $MNT recursively"
+  # Attempt to unmount the specified mount point.
+  # The commented-out section was a check for df, which is now handled by check_mount.
+  # (check_mount "$MNT" ; sudo umount -RAq "$MNT" && check "$msg" ok ) \
+  (sudo umount -RAq "$MNT" && check "$msg" ok) ||
+    check "$msg" aa # Report failure if unmount fails.
+
+  # Release any assigned loop devices.
+  _release_loops
+
+  # Clean up temporary mount directories.
+  _clean_tmp_mntdir
+}
+
+# _assign_loop: Assigns an image file to a loop device.
+# Arguments:
+#   $@: The image file path.
+# Exports 'ld' with the assigned loop device path.
+_assign_loop() {
+  local msg="assign image to loop device"
+  # Use losetup to find a free loop device, attach the image, and enable partition scanning (-P).
+  ld=$(sudo losetup --show -P -f "$@") || check "$msg" ee
+  check "$msg" ok
+}
+
+# _release_loops: Releases all assigned loop devices.
+_release_loops() {
+  local msg="release ALL loop devices"
+  # Use losetup -D to detach all loop devices.
+  sudo losetup -D || check "$msg" ee
+  check "$msg" ok
+}
+
+# _prepare_mount_image: Prepares the image for mounting, including potential resizing.
+# Arguments:
+#   img: The image file path.
+#   expand: Number of MiB to expand the filesystem by (optional).
+_prepare_mount_image() {
+  expand=${expand-} # Ensure expand is unset if not provided.
+  local msg="check $MNT not mounted already"
+  # TODO: The check_mount "$MNT" && check "$msg" ee line is commented out.
+  # It might be useful to re-enable this check if MNT is always defined before this function.
+  # For now, we'll rely on the fact that tmp_mntdir creates a new MNT each time.
+  check "$msg" ok
+
+  # If 'expand' is set, append zeros to the image file to increase its size.
+  if [ -n "$expand" ]; then
+    # Use generic_dd to write zeros to the image file.
+    $generic_dd if=/dev/zero count="$expand" >>"$img"
+  fi
+  # Assign the image to a loop device.
+  _assign_loop "$img"
+  # If 'expand' was used, resize the partition and filesystem.
+  if [ -n "$expand" ]; then
+    # Check filesystem, resize partition 2, and then resize the filesystem.
+    sudo e2fsck -fy "$ld"p2 && sudo parted "$ld" resizepart 2 100% && sudo resize2fs -f "$ld"p2
+  fi
+}
+
+# mount_full_image: Mounts both boot and root partitions of a full disk image.
+# Arguments:
+#   img: The full disk image file.
+#   MNT: The base mount directory.
+mount_full_image() {
+  # Create a temporary mount directory.
+  _tmp_mntdir
+  local msg="Mounting image"
+  # Ensure the mount point directory exists.
+  mkdir -p "$MNT"
+  # Prepare the image (assign loop device, potentially resize).
+  _prepare_mount_image
+  # Mount the root partition (p2) and the boot partition (p1).
+  local msg="${ld}p2 -> ${MNT} ${ld}p1 -> ${MNT}/boot "
+  sudo mount "$ld"p2 "$MNT" && sudo mkdir -p "$MNT"/boot && sudo mount "$ld"p1 "$MNT"/boot
+  check "$msg" ok
+}
+
+# mount_root_image: Mounts the root partition of an image.
+# Arguments:
+#   img: The image file.
+#   MNT: The mount point directory.
+mount_root_image() {
+  # Create a temporary mount directory.
+  _tmp_mntdir
+
+  local msg="Mounting image"
+  # Ensure the mount point directory exists.
+  mkdir -p "$MNT"
+
+  _prepare_mount_image
+
+  # Mount the root partition.
+  local msg="${ld} -> ${MNT}"
+  sudo mount "${ld}" "$MNT"
+  check "$msg" ok
+}
+
+# _fsck_pi_sd: Performs filesystem checks on SD card partitions.
+# Arguments:
+#   MMC: The device name for the SD card (e.g., /dev/mmcblk0).
+# This function is considered internal as it's specific to SD card operations.
+_fsck_pi_sd() {
+  # Check and repair
+  fsck.vfat -p "$MMC"p1
+  fsck.ext4 -p "$MMC"p2
+}
+
+# mount_sd: Mounts partitions of an SD card.
+# Arguments:
+#   MMC: The device name for the SD card (e.g., /dev/mmcblk0).
+#   MNT: The mount point directory (defaults to 'sdmnt').
+mount_sd() {
+  MNT=sdmnt # Default mount point for SD cards.
+  mkdir -p "$MNT"
+  local msg="check $MNT not mounted already"
+  # Check if the default SD mount point is already in use.
+  check_mount "$MNT" &>/dev/null && check "$msg" ee
+  check "$msg" ok
+
+  local msg="mount partition 1 & 2 of $MNT"
+  # Mount the second partition (root) and then the first partition (boot).
+  sudo mount "$MMC"-part2 "$MNT" && sudo mount "$MMC"-part1 "$MNT"/boot || check "$msg" ee
+  check "$msg" ok
+}
+
+# umount_sd: Unmounts the SD card partitions.
+# Arguments:
+#   MNT: The mount point directory (defaults to 'sdmnt').
+umount_sd() {
+  local msg="unmount $MNT/boot and $MNT"
+  # Check if the mount point is mounted and then unmount it.
+  (check_mount "$MNT" &>/dev/null && sudo umount -RAq "$MNT") || check "$msg" ee
+  check "$msg" ok
+}
+
+# compress: Compresses an image file using specified compression.
+# Arguments:
+#   $@: Compression type (e.g., gz, zst).
+#   BLOCKDEV: The source block device.
+#   img: The destination image file name.
+compress() {
+  echo "image and compress blockdev"
+  # Compress
+  for arg in "$@"; do
+    case "$arg" in
+    gz)
+      $generic_dd if="$BLOCKDEV" | gzip -2 >.temparchive
+      ;;
+    zst)
+      zstd -3v <"$BLOCKDEV" >.temparchive
+      ;;
+    esac
+  done
+  echo "rename from .temparchive to \"$img\""
+  # Move the temporary archive to the final image file name.
+  mv -n .temparchive "$img".$arg
+}
+
+# decompress: Decompresses an image file.
+# Arguments:
+#   $@: Compression type (e.g., gz, zst).
+#   img: The source image file.
+#   BLOCKDEV: The destination block device.
+decompress() {
+  echo "decompress image to $BLOCKDEV"
+  for arg in "$@"; do
+    case "$arg" in
+    gz | gzip | gunzip)
+      echo "unsupported"
+      exit 1
+      ;;
+    zst | zstd | zstandard)
+      # Decompress
+      zstdcat -v "$img" >"$BLOCKDEV"
+      ;;
+    esac
+  done
+}
+
+#######
+# Command line args:
+# main: The main function that parses arguments and dispatches commands.
+main() {
+  action=${1-} # Get the command action, default to empty.
+  for arg in "$@"; do
+    case "$arg" in
+    --help | -h | help)
+      help_msg
+      ;;
+    esac
+  done
+  case "$action" in
+  mount_full_image)
+    [ -n "$img" ] || help_msg
+    img="${2-$img}" mount_full_image
+    ;;
+  mount_root_image)
+    [ -n "$img" ] || help_msg
+    img="${2-$img}" mount_root_image
+    ;;
+  umount_image)
+    MNT="${2-$MNT}" umount_image
+    ;;
+  mount_sd)
+    MMC="${2-$MMC}" mount_sd
+    ;;
+  umount_sd)
+    MNT="${2-$MNT}" umount_sd
+    ;;
+  dd)
+    # Ensure image is provided.
+    [ -n "$img" ] || help_msg
+    img="${2-$img}" blockdev="${3-$blockdev}" tofrom_blockdev "$2" "$3"
+    ;;
+  loop)
+    # Assign loop device for the provided image.
+    _assign_loop "${2-$img}"
+    ;;
+  loop_release | release_loops)
+    _release_loops
+    ;;
+  compress)
+    # Expected usage: img-tools compress <compression_type> <image_file> <block_device>
+    local compression_type="${2}"
+    local image_file="${3}"
+    local block_device="${4}"
+    # Set global variables for the compress function
+    img="${image_file}" BLOCKDEV="${block_device}" compress "${compression_type}"
+    ;;
+  decompress)
+    # Expected usage: img-tools decompress <compression_type> <image_file> <block_device>
+    local compression_type="${2}"
+    local image_file="${3}"
+    local block_device="${4}"
+    # Set global variables for the decompress function
+    img="${image_file}" BLOCKDEV="${block_device}" decompress "${compression_type}"
+    ;;
+  *)
+    help_msg
+    ;;
+  esac
+}
+
+## Allows us to source this script for the functions
+# This block executes the main function only if the script is run directly.
+if [[ "${#BASH_SOURCE[@]}" -eq 1 ]]; then
+  main "$@"
+  # Exit with the status of the main function.
+  exit_tool $?
+fi

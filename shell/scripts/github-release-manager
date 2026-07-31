@@ -1,0 +1,482 @@
+#!/usr/bin/env bash
+# github-release-manager - Utility & sourceable library for GitHub releases
+#
+# Can be sourced in scripts:
+#   source github-release-manager
+#   gh_release_install pkgforge-dev/Citron-AppImage --pattern ".*_v3\.AppImage" --name "citron.AppImage"
+#
+# Or executed directly as CLI:
+#   github-release-manager latest <owner/repo>
+#   github-release-manager list <owner/repo> [tag]
+#   github-release-manager url <owner/repo> [pattern] [tag]
+#   github-release-manager digest <owner/repo> [pattern] [tag]
+#   github-release-manager download <owner/repo> [pattern] [dest] [tag]
+#   github-release-manager install <owner/repo> [--pattern PATTERN] [--bin BIN_NAME] [--dir DEST_DIR] [--name CUSTOM_NAME] [--tag TAG] [--force]
+#   github-release-manager arch
+
+set -euo pipefail
+
+# --- API Helper ---
+gh_api_curl() {
+  local url="$1"
+  local headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: github-release-manager")
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    headers+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    headers+=(-H "Authorization: Bearer $GH_TOKEN")
+  fi
+  curl -s --connect-timeout 5 --max-time 15 "${headers[@]}" "$url"
+}
+
+# --- Architecture & OS Detection ---
+gh_detect_arch() {
+  local raw_arch
+  raw_arch=$(uname -m)
+  case "$raw_arch" in
+    x86_64|amd64)
+      echo "x86_64"
+      ;;
+    aarch64|arm64)
+      echo "arm64"
+      ;;
+    i386|i686|x86)
+      echo "i386"
+      ;;
+    armv7l|armv7|armhf)
+      echo "armv7"
+      ;;
+    *)
+      echo "$raw_arch"
+      ;;
+  esac
+}
+
+gh_detect_arch_pattern() {
+  local arch
+  arch=$(gh_detect_arch)
+  case "$arch" in
+    x86_64)
+      echo "(x86_64|amd64|x64|64bit)"
+      ;;
+    arm64)
+      echo "(aarch64|arm64|armv8)"
+      ;;
+    i386)
+      echo "(i386|i686|x86|32bit)"
+      ;;
+    armv7)
+      echo "(armv7|armhf|arm)"
+      ;;
+    *)
+      echo "$arch"
+      ;;
+  esac
+}
+
+gh_detect_os() {
+  local raw_os
+  raw_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+  case "$raw_os" in
+    linux)
+      echo "linux"
+      ;;
+    darwin)
+      echo "darwin"
+      ;;
+    msys*|mingw*|cygwin*)
+      echo "windows"
+      ;;
+    *)
+      echo "$raw_os"
+      ;;
+  esac
+}
+
+# --- Release Information Functions ---
+gh_release_get_json() {
+  local repo="$1"
+  local tag="${2:-latest}"
+  local endpoint
+  if [[ "$tag" == "latest" ]]; then
+    endpoint="https://api.github.com/repos/${repo}/releases/latest"
+  else
+    endpoint="https://api.github.com/repos/${repo}/releases/tags/${tag}"
+  fi
+
+  local json
+  if ! json=$(gh_api_curl "$endpoint") || [[ -z "$json" ]]; then
+    echo "Error: Could not reach GitHub API for '$repo' (network offline or timed out)." >&2
+    return 1
+  fi
+
+  if ! echo "$json" | jq empty >/dev/null 2>&1; then
+    echo "Error: Invalid response received from GitHub API for '$repo'." >&2
+    return 1
+  fi
+
+  if echo "$json" | jq -e 'has("message")' >/dev/null 2>&1; then
+    local msg
+    msg=$(echo "$json" | jq -r '.message')
+    echo "Error: GitHub API response for $repo ($tag): $msg" >&2
+    return 1
+  fi
+  echo "$json"
+}
+
+gh_release_latest_tag() {
+  local repo="$1"
+  local json
+  json=$(gh_release_get_json "$repo" "latest") || return 1
+  echo "$json" | jq -r '.tag_name'
+}
+
+gh_release_list_assets() {
+  local repo="$1"
+  local tag="${2:-latest}"
+  local json
+  json=$(gh_release_get_json "$repo" "$tag") || return 1
+  echo "$json" | jq -r '.assets[] | "\(.name)\t\(.digest // "N/A")\t\(.browser_download_url)"'
+}
+
+# --- Asset Matching, Digest & Download ---
+gh_release_find_asset_url() {
+  local repo="$1"
+  local pattern="${2:-}"
+  local tag="${3:-latest}"
+
+  local json
+  json=$(gh_release_get_json "$repo" "$tag") || return 1
+
+  if [[ -n "$pattern" ]]; then
+    local url
+    url=$(echo "$json" | jq -r --arg pat "$pattern" '.assets[] | select(.name | match($pat; "i")) | .browser_download_url' | head -n 1)
+    if [[ -n "$url" && "$url" != "null" ]]; then
+      echo "$url"
+      return 0
+    fi
+  else
+    local arch_pat os_pat url
+    arch_pat=$(gh_detect_arch_pattern)
+    os_pat=$(gh_detect_os)
+
+    # Try matching both OS and Arch pattern
+    url=$(echo "$json" | jq -r --arg arch "$arch_pat" --arg os "$os_pat" \
+      '.assets[] | select((.name | match($arch; "i")) and (.name | match($os; "i"))) | .browser_download_url' | head -n 1)
+
+    if [[ -z "$url" || "$url" == "null" ]]; then
+      # Fallback to matching arch pattern only
+      url=$(echo "$json" | jq -r --arg arch "$arch_pat" \
+        '.assets[] | select(.name | match($arch; "i")) | .browser_download_url' | head -n 1)
+    fi
+
+    if [[ -n "$url" && "$url" != "null" ]]; then
+      echo "$url"
+      return 0
+    fi
+  fi
+
+  echo "Error: No matching asset found for repo '$repo' (pattern: '${pattern:-auto}', tag: '$tag')" >&2
+  return 1
+}
+
+gh_release_find_asset_digest() {
+  local repo="$1"
+  local pattern="${2:-}"
+  local tag="${3:-latest}"
+
+  local json
+  json=$(gh_release_get_json "$repo" "$tag") || return 1
+
+  local digest=""
+  if [[ -n "$pattern" ]]; then
+    digest=$(echo "$json" | jq -r --arg pat "$pattern" '.assets[] | select(.name | match($pat; "i")) | .digest' | head -n 1)
+  else
+    local arch_pat os_pat
+    arch_pat=$(gh_detect_arch_pattern)
+    os_pat=$(gh_detect_os)
+
+    digest=$(echo "$json" | jq -r --arg arch "$arch_pat" --arg os "$os_pat" \
+      '.assets[] | select((.name | match($arch; "i")) and (.name | match($os; "i"))) | .digest' | head -n 1)
+
+    if [[ -z "$digest" || "$digest" == "null" ]]; then
+      digest=$(echo "$json" | jq -r --arg arch "$arch_pat" \
+        '.assets[] | select(.name | match($arch; "i")) | .digest' | head -n 1)
+    fi
+  fi
+
+  if [[ -n "$digest" && "$digest" != "null" ]]; then
+    echo "${digest#sha256:}"
+    return 0
+  fi
+
+  return 1
+}
+
+gh_release_download() {
+  local repo="$1"
+  local pattern="${2:-}"
+  local dest="${3:-.}"
+  local tag="${4:-latest}"
+
+  local url
+  url=$(gh_release_find_asset_url "$repo" "$pattern" "$tag") || return 1
+
+  local filename
+  filename=$(basename "$url")
+
+  local target_path="$dest"
+  if [[ -d "$dest" ]]; then
+    target_path="${dest%/}/$filename"
+  fi
+
+  # Check if target file exists and matches API SHA256 digest
+  local expected_digest
+  expected_digest=$(gh_release_find_asset_digest "$repo" "$pattern" "$tag" 2>/dev/null || echo "")
+
+  if [[ -n "$expected_digest" && -f "$target_path" ]]; then
+    local current_hash
+    current_hash=$(sha256sum "$target_path" 2>/dev/null | awk '{print $1}')
+    if [[ "$current_hash" == "$expected_digest" ]]; then
+      echo "File $target_path already exists and matches remote SHA256 ($expected_digest). Skipping download." >&2
+      echo "$target_path"
+      return 0
+    fi
+  fi
+
+  echo "Downloading $filename from $url ..." >&2
+  if ! curl -L -f --connect-timeout 5 --max-time 120 -# -o "$target_path" "$url"; then
+    echo "Error: Download failed for $url (network offline or timed out)." >&2
+    return 1
+  fi
+
+  if [[ -n "$expected_digest" && -f "$target_path" ]]; then
+    local downloaded_hash
+    downloaded_hash=$(sha256sum "$target_path" 2>/dev/null | awk '{print $1}')
+    if [[ "$downloaded_hash" != "$expected_digest" ]]; then
+      echo "Warning: Downloaded file SHA256 ($downloaded_hash) does not match expected digest ($expected_digest)" >&2
+    fi
+  fi
+
+  echo "$target_path"
+}
+
+# --- Installer Helper ---
+gh_release_install() {
+  local repo=""
+  local pattern=""
+  local bin_name=""
+  local custom_name=""
+  local dest_dir="$HOME/.local/bin"
+  local tag="latest"
+  local force=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pattern|-p) pattern="$2"; shift 2 ;;
+      --bin|-b) bin_name="$2"; shift 2 ;;
+      --name|-n) custom_name="$2"; shift 2 ;;
+      --dir|-d) dest_dir="$2"; shift 2 ;;
+      --tag|-t) tag="$2"; shift 2 ;;
+      --force|-f) force=true; shift 1 ;;
+      *)
+        if [[ -z "$repo" ]]; then
+          repo="$1"; shift 1
+        else
+          echo "Error: Unknown parameter '$1'" >&2; return 1
+        fi
+        ;;
+    esac
+  done
+
+  if [[ -z "$repo" ]]; then
+    echo "Error: Repo parameter is required for gh_release_install" >&2
+    return 1
+  fi
+
+  local out_name
+  if [[ -n "$custom_name" ]]; then
+    out_name="$custom_name"
+  elif [[ -n "$bin_name" ]]; then
+    out_name="$bin_name"
+  else
+    out_name=$(basename "$repo")
+  fi
+  local final_path="$dest_dir/$out_name"
+
+  local current_tag
+  if ! current_tag=$(gh_release_latest_tag "$repo" 2>/dev/null); then
+    if [[ -x "$final_path" ]]; then
+      echo "Warning: Unable to reach GitHub. Using existing installed binary at $final_path" >&2
+      return 0
+    else
+      echo "Error: Could not reach GitHub API for '$repo' and no existing binary was found at $final_path" >&2
+      return 1
+    fi
+  fi
+
+  local tag_file="${HOME}/.cache/github-release-manager/${repo//\//_}.tag"
+  mkdir -p "$(dirname "$tag_file")"
+
+  if [[ "$force" == "false" && -f "$tag_file" ]]; then
+    local installed_tag
+    installed_tag=$(cat "$tag_file")
+    if [[ "$installed_tag" == "$current_tag" && -x "$final_path" ]]; then
+      echo "$repo is already up-to-date ($current_tag)." >&2
+      return 0
+    fi
+  fi
+
+  local temp_dir
+  temp_dir=$(mktemp -d)
+  # shellcheck disable=SC2064
+  trap "rm -rf '$temp_dir'" EXIT
+
+  local downloaded_file
+  if ! downloaded_file=$(gh_release_download "$repo" "$pattern" "$temp_dir" "$tag"); then
+    if [[ -x "$final_path" ]]; then
+      echo "Warning: Download failed. Using existing installed binary at $final_path" >&2
+      return 0
+    else
+      echo "Error: Download failed and no existing binary found at $final_path" >&2
+      return 1
+    fi
+  fi
+
+  local filename
+  filename=$(basename "$downloaded_file")
+  local lower_filename
+  lower_filename=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+
+  mkdir -p "$dest_dir"
+
+  local target_bin=""
+  if [[ "$lower_filename" == *.tar.gz || "$lower_filename" == *.tgz || "$lower_filename" == *.tar.xz || "$lower_filename" == *.tar.bz2 || "$lower_filename" == *.zip ]]; then
+    echo "Extracting archive $filename ..." >&2
+    mkdir -p "$temp_dir/extracted"
+    if [[ "$lower_filename" == *.zip ]]; then
+      unzip -q "$downloaded_file" -d "$temp_dir/extracted"
+    else
+      tar -xf "$downloaded_file" -C "$temp_dir/extracted"
+    fi
+
+    if [[ -n "$bin_name" ]]; then
+      target_bin=$(find "$temp_dir/extracted" -type f -name "$bin_name" | head -n 1)
+    else
+      target_bin=$(find "$temp_dir/extracted" -type f -executable ! -name "*.dll" ! -name "*.so" ! -name "*.dylib" ! -name "*.txt" ! -name "*.md" | head -n 1)
+      if [[ -z "$target_bin" ]]; then
+        target_bin=$(find "$temp_dir/extracted" -type f ! -name "*.dll" ! -name "*.so" ! -name "*.txt" ! -name "*.md" ! -name "*.json" ! -name "*.xml" | head -n 1)
+      fi
+    fi
+
+    if [[ -z "$target_bin" ]]; then
+      echo "Error: Could not locate executable binary in extracted package" >&2
+      return 1
+    fi
+  else
+    target_bin="$downloaded_file"
+  fi
+
+  mv "$target_bin" "$final_path"
+  chmod +x "$final_path"
+  echo "$current_tag" > "$tag_file"
+  echo "Successfully installed $out_name ($current_tag) to $final_path" >&2
+}
+
+# --- CLI Functionality ---
+github_release_manager_usage() {
+  cat <<'EOF'
+github-release-manager - Download and manage GitHub releases
+
+Usage:
+  github-release-manager <command> [options]
+
+Commands:
+  latest <owner/repo>
+      Print the latest release tag name.
+
+  list <owner/repo> [tag]
+      List all assets, SHA256 digests, and download URLs for a release.
+
+  url <owner/repo> [pattern] [tag]
+      Get download URL matching a regex pattern (or auto-detected system arch/OS).
+
+  digest <owner/repo> [pattern] [tag]
+      Get SHA256 digest matching a regex pattern (or auto-detected system arch/OS).
+
+  download <owner/repo> [pattern] [dest] [tag]
+      Download matching asset to target file or directory (skips if existing file matches SHA256).
+
+  install <owner/repo> [options]
+      Download, extract, and install executable to target directory.
+      Options:
+        -p, --pattern REGEX    Asset matching pattern
+        -b, --bin NAME         Executable filename inside archive
+        -n, --name NAME        Installed target filename
+        -d, --dir PATH         Installation directory (default: ~/.local/bin)
+        -t, --tag TAG          Release tag (default: latest)
+        -f, --force            Force re-install even if tag matches
+
+  arch
+      Print auto-detected architecture and OS regex patterns.
+
+EOF
+}
+
+github_release_manager_main() {
+  if [[ $# -lt 1 ]]; then
+    github_release_manager_usage
+    return 1
+  fi
+
+  local command="$1"
+  shift
+
+  case "$command" in
+    latest)
+      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager latest <owner/repo>" >&2; return 1; fi
+      gh_release_latest_tag "$1"
+      ;;
+    list)
+      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager list <owner/repo> [tag]" >&2; return 1; fi
+      gh_release_list_assets "$@"
+      ;;
+    url)
+      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager url <owner/repo> [pattern] [tag]" >&2; return 1; fi
+      gh_release_find_asset_url "$@"
+      ;;
+    digest)
+      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager digest <owner/repo> [pattern] [tag]" >&2; return 1; fi
+      gh_release_find_asset_digest "$@"
+      ;;
+    download)
+      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager download <owner/repo> [pattern] [dest] [tag]" >&2; return 1; fi
+      gh_release_download "$@"
+      ;;
+    install)
+      gh_release_install "$@"
+      ;;
+    arch)
+      local arch pat os
+      arch=$(gh_detect_arch)
+      pat=$(gh_detect_arch_pattern)
+      os=$(gh_detect_os)
+      echo "Detected System Information:"
+      echo "  OS:           $os"
+      echo "  Arch:         $arch"
+      echo "  Arch Pattern: $pat"
+      ;;
+    -h|--help|help)
+      github_release_manager_usage
+      ;;
+    *)
+      echo "Error: Unknown command '$command'" >&2
+      github_release_manager_usage
+      return 1
+      ;;
+  esac
+}
+
+# --- Sourced vs Direct Execution Guard ---
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  github_release_manager_main "$@"
+fi

@@ -1,0 +1,4 @@
+#!/bin/sh
+
+TO_DEPLOY="ai editor media shell ssh"
+SWAY_THEME=dark

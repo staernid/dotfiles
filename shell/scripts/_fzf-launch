@@ -1,0 +1,2 @@
+#!/bin/zsh
+for str in $(whence -pm '*'); do echo ${str##*/}; done | fzf

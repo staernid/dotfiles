@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Default values if run manually
+DEFAULT_W=1600
+DEFAULT_H=1068
+DEFAULT_HZ=90
+
+# Get initial values from Sunshine or fall back to defaults
+output_w=${SUNSHINE_CLIENT_WIDTH:-$DEFAULT_W}
+output_h=${SUNSHINE_CLIENT_HEIGHT:-$DEFAULT_H}
+output_hz=${SUNSHINE_CLIENT_FPS:-$DEFAULT_HZ}
+
+# Flags
+EXCLUSIVE_MODE=false
+
+log() {
+  echo "[$(date +'%Y-%m-%d %H:%M:%S')] [Sunshine-VirtualDisplay] $1"
+}
+
+# Parse options/flags first
+while [[ "$1" =~ ^- ]]; do
+  case "$1" in
+    --half|-h)
+      output_w=$((output_w / 2))
+      output_h=$((output_h / 2))
+      log "Flag set: Halving incoming resolution"
+      shift
+      ;;
+    --exclusive|-e)
+      EXCLUSIVE_MODE=true
+      log "Flag set: Exclusive display mode active"
+      shift
+      ;;
+    *)
+      echo "Usage: $0 [--half] [--exclusive] {prepare|finalize|clean}"
+      exit 1
+      ;;
+  esac
+done
+
+output_suffix=virt0
+output_name=Virtual-${output_suffix}
+
+clean() {
+  log "Cleaning potential buggy custom modes for ${output_name}..."
+  for i in {0..3}; do kscreen-doctor output.${output_name}.removeCustomMode.$i; done
+}
+
+add_custom_mode() {
+  if kscreen-doctor -j | jq -e ".outputs[] | select(.name == \"${output_name}\") .modes[] | select(.size.width == ${output_w} and .size.height == ${output_h} and (.refreshRate | round) == ${output_hz})" > /dev/null; then
+    log "Mode ${output_w}x${output_h}@${output_hz}Hz already exists. Skipping add."
+  else
+    log "Adding custom mode: ${output_w}x${output_h}@${output_hz}Hz..."
+    kscreen-doctor output.${output_name}.addCustomMode.${output_w}.${output_h}.${output_hz}000.full
+  fi
+}
+
+toggle_other_outputs() {
+  log "Toggling real displays to: $1"
+  for out in $(kscreen-doctor -j | jq -r ".outputs[] | select(.name != \"${output_name}\") .name"); do
+    kscreen-doctor output."${out}"."$1"
+  done
+}
+
+prepare() {
+  log "START: Preparing stream for App: '${SUNSHINE_APP_NAME:-Testing Mode}'"
+  log "TARGET CONFIG: Resolution=${output_w}x${output_h}, RefreshRate=${output_hz}Hz, Exclusive=${EXCLUSIVE_MODE}"
+  
+  krfb-virtualmonitor --resolution ${output_w}x${output_h} --name $output_suffix --password fake123 --port 32167 &
+  disown && sleep 2
+
+  add_custom_mode
+  kscreen-doctor output.${output_name}.mode.${output_w}x${output_h}@${output_hz} output.${output_name}.enable
+  
+  [ "$EXCLUSIVE_MODE" = true ] && toggle_other_outputs "disable"
+  loginctl unlock-session "$XDG_SESSION_ID"
+  log "SUCCESS: Stream target display initialized."
+}
+
+finalize() {
+  log "START: Cleaning up stream session..."
+  [ "$EXCLUSIVE_MODE" = true ] && toggle_other_outputs "enable" && sleep 1
+
+  pkill -f krfb-virtualmonitor
+  log "SUCCESS: Virtual monitor torn down cleanly."
+}
+
+# Check the primary command
+case "$1" in
+  prepare)  prepare;  exit 0 ;;
+  finalize) finalize; exit 0 ;;
+  clean)    clean;    exit 0 ;;
+  *) echo "Usage: $0 [--half] [--exclusive] {prepare|finalize|clean}"; exit 1 ;;
+esac
