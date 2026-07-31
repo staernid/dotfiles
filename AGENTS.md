@@ -8,6 +8,7 @@ Each top-level directory is a stow package: `ai`, `arch`, `editor`, `media`, `se
 
 ## Deployment
 
+- `./prepare.sh` — best-effort dependency installer for Fedora, Arch, Debian, and Termux.
 - `./deploy` — single entry point. Installs stow on first run, stows packages. Pass `-D` to revert.
 - `./provision-secrets` — pulls SSH keys and config secrets from Bitwarden. Pass `-y` to skip prompts.
 - `./.config` sets `TO_DEPLOY` (which packages to stow). Gitignored; `./config.dist` is the template.

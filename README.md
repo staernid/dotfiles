@@ -1,19 +1,13 @@
 # dotfiles
 
-Linux desktop config managed with GNU stow.
-
-## Prerequisites
-
-- **git**
-- **stow**
-- **bitwarden CLI** (`bw`) — only needed for `./provision-secrets` (though we download it automatically with a wrapper of bw)
+Linux desktop & mobile CLI config managed with GNU stow.
 
 ## Usage
 
 ```sh
-./bootstrap          # one-shot: prereqs → stow → theme links
-./provision-secrets  # pull SSH keys & config secrets from Bitwarden
-./deploy             # fast re-stow after config changes
+./prepare.sh         # Best-effort dependency installer (Fedora, Arch, Debian, Termux)
+./provision-secrets  # Pull SSH keys & config secrets from Bitwarden
+./deploy             # Fast re-stow after config changes
 ```
 
 See [`AGENTS.md`](AGENTS.md) for package layout, conventions, and per-machine setup.
