@@ -2,18 +2,23 @@
 
 # update_system: Update system packages across distros (Fedora, Arch, Debian, Termux, Void)
 update_system() {
+  local _s="sudo"
+  if [ "$(id -u)" -eq 0 ] || ! command -v sudo &>/dev/null || [ -n "$PREFIX" ]; then
+    _s=""
+  fi
+
   if command -v dnf5 &>/dev/null; then
-    sudo dnf5 upgrade --refresh "$@"
+    $_s dnf5 upgrade --refresh "$@"
   elif command -v dnf &>/dev/null; then
-    sudo dnf upgrade --refresh "$@"
+    $_s dnf upgrade --refresh "$@"
   elif command -v pacman &>/dev/null; then
-    sudo pacman -Syu "$@"
-  elif command -v apt &>/dev/null; then
-    sudo apt update && sudo apt upgrade -y "$@"
+    $_s pacman -Syu "$@"
   elif command -v pkg &>/dev/null; then
     pkg update && pkg upgrade -y "$@"
+  elif command -v apt &>/dev/null; then
+    $_s apt update && $_s apt upgrade -y "$@"
   elif command -v xbps-install &>/dev/null; then
-    sudo xbps-install -Syu "$@"
+    $_s xbps-install -Syu "$@"
   else
     echo "No supported package manager found." >&2
     return 1
