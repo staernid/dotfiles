@@ -8,6 +8,8 @@ unsetopt PROMPT_SP 2>/dev/null
 # Default programs:
 export EDITOR="nvim"
 export BROWSER="firefox"
+# Filepicker should use portal, e.g. kde's file picker
+export GTK_USE_PORTAL=1
 
 # Change the default crypto/weather monitor sites.
 # export CRYPTOURL="rate.sx"
