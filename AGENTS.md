@@ -1,24 +1,17 @@
 # dotfiles
 
-Minimalist dotfiles managed with GNU stow and a simple deploy script
+Minimalist dotfiles managed with GNU stow. Usage docs live in the script headers — see `deploy` and `provision-secrets`.
 
 ## Layout
 
-Each top-level directory is a stow package: `arch`, `editor`, `kitty`, `media`, `shell`, `ssh`, `sway`, `zsh`. Files mirror their target paths under `$HOME` — e.g. `editor/.config/nvim/init.lua` → `~/.config/nvim/init.lua`. Note: Some of the config files are "hidden" (dot prefix)
+Each top-level directory is a stow package: `ai`, `arch`, `editor`, `kitty`, `media`, `secrets`, `shell`, `ssh`, `sway`. Files mirror their target paths under `$HOME` — e.g. `editor/.config/nvim/init.lua` → `~/.config/nvim/init.lua`. Note: Some of the config files are "hidden" (dot prefix)
 
 ## Deployment
 
-- `dotfile.conf` sets `TO_DEPLOY` (which packages to stow) and `SWAY_THEME`.
-- `./bootstrap` — one-shot setup for a new machine: checks prereqs (git, stow), installs stow if missing via pacman/apt/dnf, clones scripts repo, validates `dotfile.conf`, then delegates stow/theming to `./deploy`.
-- `./deploy` — fast path for re-stowing after config edits: sources `dotfile.conf`, stows listed packages, then links theme symlinks for sway/kitty/waybar.
-- `./provision-secrets` — pull SSH keys and config secrets from Bitwarden vault. Idempotent. Run after `./bootstrap` or whenever secrets need refreshing.
-- `./revert` stows `-D` the listed packages.
-- Scripts live at `$HOME/scripts` (cloned from `git@github.com:staernid/scripts.git`); added to `PATH` via shell profile, no symlink.
-- Config file is gitignored; `dotfile.conf.dist` is the template.
-
-## Themes for kitty and sway
-
-Although currently unmaintained, there exist three themes: `dark` (current), `autumn`, `ocean`. Each package uses its own mechanism — sway/waybar: `style.css` symlinked; kitty: `theme.link` symlinked to `$THEME.conf`.
+- `./deploy` — single entry point. Installs stow on first run, stows packages. Pass `-D` to revert.
+- `./provision-secrets` — pulls SSH keys and config secrets from Bitwarden. Pass `-y` to skip prompts.
+- `dotfile.conf` sets `TO_DEPLOY` (which packages to stow). Gitignored; `dotfile.conf.dist` is the template.
+- Scripts live at `$HOME/scripts` (cloned separately); added to `PATH` via shell profile.
 
 ## Conventions
 

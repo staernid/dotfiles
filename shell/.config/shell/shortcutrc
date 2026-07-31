@@ -46,7 +46,7 @@ function ytdlp_transcript_clean(){
 }
 
 launcher() {
-	$(whence -pm '*' | xargs -i basename {} | fzf -i --cycle)
+	$(compgen -c | sort -u | fzf -i --cycle)
 }
 
 print_box_drawing_chars() {

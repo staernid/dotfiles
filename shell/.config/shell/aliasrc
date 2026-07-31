@@ -19,8 +19,6 @@ se() {
   [ -f "$HOME/.local/bin/$choice" ] && $EDITOR "$HOME/.local/bin/$choice"
 }
 
-alias \
-  \q="zsh-ai"
 
 # Verbosity and settings that you pretty much just always are going to want.
 alias \
@@ -94,4 +92,4 @@ alias gcaal="gcloud auth application-default login"
 alias \
   lf="lfub" \
   magit="nvim -c MagitOnly" \
-  ref='shortcuts >/dev/null; source ${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutrc ; source ${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutenvrc ; source ${XDG_CONFIG_HOME:-$HOME/.config}/shell/zshnameddirrc'
+  ref='shortcuts >/dev/null; source ${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutrc ; source ${XDG_CONFIG_HOME:-$HOME/.config}/shell/shortcutenvrc'

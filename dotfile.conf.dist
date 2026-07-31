@@ -1,4 +1,3 @@
-#!/bin/sh
-
-TO_DEPLOY="secrets editor media shell ssh zsh"
-SWAY_THEME=dark
+# Packages to stow (space-separated).
+# Available: ai arch editor kitty media secrets shell ssh sway
+TO_DEPLOY="secrets editor media shell ssh"
