@@ -1,482 +1,711 @@
-#!/usr/bin/env bash
-# github-release-manager - Utility & sourceable library for GitHub releases
+#!/usr/bin/env python3
+"""github-release-manager - Clean, zero-dependency release manager for Linux & Unix binaries."""
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import sys
+import tarfile
+import tempfile
+import urllib.error
+import urllib.request
+import zipfile
+from pathlib import Path
+from typing import Any
+
+import tomllib
+
+# Paths & Settings
+CONFIG_FILE = Path.home() / ".config" / "github-release-manager" / "apps.toml"
+CACHE_DIR = Path.home() / ".cache" / "github-release-manager"
+APPS_DIR = Path.home() / ".local" / "share" / "github-release-manager" / "apps"
+DEFAULT_BIN_DIR = Path.home() / ".local" / "bin"
+
+ARCH_MAP = {
+    "amd64": "x86_64",
+    "x86": "i386",
+    "i686": "i386",
+    "aarch64": "arm64",
+    "armv7l": "armv7",
+    "armhf": "armv7",
+}
+
+ARCH_PAT = {
+    "x86_64": r"(x86_64|amd64|x64|64bit)",
+    "arm64": r"(aarch64|arm64|armv8)",
+    "i386": r"(i386|i686|x86)",
+    "armv7": r"(armv7|armhf|arm)",
+}
+
+NON_BIN_EXTS = {
+    ".sha256",
+    ".sha512",
+    ".md5",
+    ".sig",
+    ".asc",
+    ".deb",
+    ".rpm",
+    ".txt",
+    ".md",
+    ".json",
+    ".xml",
+    ".dmg",
+    ".pkg",
+}
+
+DEFAULT_CONFIG_TEMPLATE = """# github-release-manager configuration file
 #
-# Can be sourced in scripts:
-#   source github-release-manager
-#   gh_release_install pkgforge-dev/Citron-AppImage --pattern ".*_v3\.AppImage" --name "citron.AppImage"
-#
-# Or executed directly as CLI:
-#   github-release-manager latest <owner/repo>
-#   github-release-manager list <owner/repo> [tag]
-#   github-release-manager url <owner/repo> [pattern] [tag]
-#   github-release-manager digest <owner/repo> [pattern] [tag]
-#   github-release-manager download <owner/repo> [pattern] [dest] [tag]
-#   github-release-manager install <owner/repo> [--pattern PATTERN] [--bin BIN_NAME] [--dir DEST_DIR] [--name CUSTOM_NAME] [--tag TAG] [--force]
-#   github-release-manager arch
+# [example-app]
+# repo = "owner/repo"
+# pattern = '.*\\.tar\\.gz$'  # Optional asset regex
+# bin = "example"             # Optional binary name inside archive
+# gui = true                  # Optional: Create desktop launcher
+"""
 
-set -euo pipefail
+_TOKEN_CACHE = None
 
-# --- API Helper ---
-gh_api_curl() {
-  local url="$1"
-  local headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: github-release-manager")
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    headers+=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  elif [[ -n "${GH_TOKEN:-}" ]]; then
-    headers+=(-H "Authorization: Bearer $GH_TOKEN")
-  fi
-  curl -s --connect-timeout 5 --max-time 15 "${headers[@]}" "$url"
-}
 
-# --- Architecture & OS Detection ---
-gh_detect_arch() {
-  local raw_arch
-  raw_arch=$(uname -m)
-  case "$raw_arch" in
-    x86_64|amd64)
-      echo "x86_64"
-      ;;
-    aarch64|arm64)
-      echo "arm64"
-      ;;
-    i386|i686|x86)
-      echo "i386"
-      ;;
-    armv7l|armv7|armhf)
-      echo "armv7"
-      ;;
-    *)
-      echo "$raw_arch"
-      ;;
-  esac
-}
+def get_gh_token():
+    """Get GitHub API token from env or gh CLI."""
+    global _TOKEN_CACHE
+    if _TOKEN_CACHE is not None:
+        return _TOKEN_CACHE
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not token:
+        try:
+            import subprocess
 
-gh_detect_arch_pattern() {
-  local arch
-  arch=$(gh_detect_arch)
-  case "$arch" in
-    x86_64)
-      echo "(x86_64|amd64|x64|64bit)"
-      ;;
-    arm64)
-      echo "(aarch64|arm64|armv8)"
-      ;;
-    i386)
-      echo "(i386|i686|x86|32bit)"
-      ;;
-    armv7)
-      echo "(armv7|armhf|arm)"
-      ;;
-    *)
-      echo "$arch"
-      ;;
-  esac
-}
+            res = subprocess.run(
+                ["gh", "auth", "token"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+            )
+            if res.returncode == 0:
+                token = res.stdout.strip()
+        except (subprocess.SubprocessError, OSError):
+            pass
+    _TOKEN_CACHE = token or ""
+    return _TOKEN_CACHE
 
-gh_detect_os() {
-  local raw_os
-  raw_os=$(uname -s | tr '[:upper:]' '[:lower:]')
-  case "$raw_os" in
-    linux)
-      echo "linux"
-      ;;
-    darwin)
-      echo "darwin"
-      ;;
-    msys*|mingw*|cygwin*)
-      echo "windows"
-      ;;
-    *)
-      echo "$raw_os"
-      ;;
-  esac
-}
 
-# --- Release Information Functions ---
-gh_release_get_json() {
-  local repo="$1"
-  local tag="${2:-latest}"
-  local endpoint
-  if [[ "$tag" == "latest" ]]; then
-    endpoint="https://api.github.com/repos/${repo}/releases/latest"
-  else
-    endpoint="https://api.github.com/repos/${repo}/releases/tags/${tag}"
-  fi
+def gh_api(url: str) -> Any:
+    """Fetch GitHub REST API endpoint with detailed rate-limit handling."""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "github-release-manager",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    token = get_gh_token()
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 429):
+            remaining = e.headers.get("x-ratelimit-remaining", "")
+            if (
+                remaining == "0"
+                or e.code == 429
+                or "rate limit" in str(e.reason).lower()
+            ):
+                token_hint = (
+                    ""
+                    if token
+                    else " (Set GITHUB_TOKEN or authenticate via 'gh auth login' to increase rate limits)"
+                )
+                sys.stderr.write(
+                    f"GitHub API Rate Limit Exceeded ({url}) [HTTP {e.code}]{token_hint}\n"
+                )
+                return None
+        sys.stderr.write(f"GitHub API HTTP Error {e.code} ({url}): {e.reason}\n")
+        return None
+    except (urllib.error.URLError, OSError) as e:
+        sys.stderr.write(f"GitHub API Network Error ({url}): {e}\n")
+        return None
 
-  local json
-  if ! json=$(gh_api_curl "$endpoint") || [[ -z "$json" ]]; then
-    echo "Error: Could not reach GitHub API for '$repo' (network offline or timed out)." >&2
-    return 1
-  fi
 
-  if ! echo "$json" | jq empty >/dev/null 2>&1; then
-    echo "Error: Invalid response received from GitHub API for '$repo'." >&2
-    return 1
-  fi
+def detect_sys():
+    """Detect OS, Arch, and regex search patterns."""
+    machine = platform.machine().lower()
+    arch = ARCH_MAP.get(machine, machine)
+    sys_name = platform.system().lower()
+    if "darwin" in sys_name:
+        os_pat = r"(darwin|mac|macos|osx|apple)"
+    else:
+        os_pat = r"(linux|ubuntu|debian)"
+    return sys_name, os_pat, arch, ARCH_PAT.get(arch, arch)
 
-  if echo "$json" | jq -e 'has("message")' >/dev/null 2>&1; then
-    local msg
-    msg=$(echo "$json" | jq -r '.message')
-    echo "Error: GitHub API response for $repo ($tag): $msg" >&2
-    return 1
-  fi
-  echo "$json"
-}
 
-gh_release_latest_tag() {
-  local repo="$1"
-  local json
-  json=$(gh_release_get_json "$repo" "latest") || return 1
-  echo "$json" | jq -r '.tag_name'
-}
+def sha256_file(path):
+    """Compute SHA-256 hash of a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
-gh_release_list_assets() {
-  local repo="$1"
-  local tag="${2:-latest}"
-  local json
-  json=$(gh_release_get_json "$repo" "$tag") || return 1
-  echo "$json" | jq -r '.assets[] | "\(.name)\t\(.digest // "N/A")\t\(.browser_download_url)"'
-}
 
-# --- Asset Matching, Digest & Download ---
-gh_release_find_asset_url() {
-  local repo="$1"
-  local pattern="${2:-}"
-  local tag="${3:-latest}"
+def find_asset(repo, pattern="", tag="latest"):
+    """Find release download URL, SHA-256 digest, and asset filename."""
+    tag_path = "latest" if tag == "latest" else f"tags/{tag}"
+    url = f"https://api.github.com/repos/{repo}/releases/{tag_path}"
+    data = gh_api(url)
+    if not data or "assets" not in data:
+        return None, None, None
 
-  local json
-  json=$(gh_release_get_json "$repo" "$tag") || return 1
+    _, os_pat, _, arch_pat = detect_sys()
+    assets = [
+        a
+        for a in data["assets"]
+        if pattern or Path(a["name"]).suffix.lower() not in NON_BIN_EXTS
+    ]
 
-  if [[ -n "$pattern" ]]; then
-    local url
-    url=$(echo "$json" | jq -r --arg pat "$pattern" '.assets[] | select(.name | match($pat; "i")) | .browser_download_url' | head -n 1)
-    if [[ -n "$url" && "$url" != "null" ]]; then
-      echo "$url"
-      return 0
-    fi
-  else
-    local arch_pat os_pat url
-    arch_pat=$(gh_detect_arch_pattern)
-    os_pat=$(gh_detect_os)
+    def match(name, pat):
+        return bool(re.search(pat, name, re.IGNORECASE)) if pat else True
 
-    # Try matching both OS and Arch pattern
-    url=$(echo "$json" | jq -r --arg arch "$arch_pat" --arg os "$os_pat" \
-      '.assets[] | select((.name | match($arch; "i")) and (.name | match($os; "i"))) | .browser_download_url' | head -n 1)
+    cands = [
+        a
+        for a in assets
+        if match(a["name"], pattern)
+        and match(a["name"], arch_pat)
+        and match(a["name"], os_pat)
+    ]
+    if not cands:
+        cands = [
+            a
+            for a in assets
+            if match(a["name"], pattern) and match(a["name"], arch_pat)
+        ]
+    if not cands:
+        cands = [a for a in assets if match(a["name"], pattern)]
+    if not cands:
+        return None, None, None
 
-    if [[ -z "$url" || "$url" == "null" ]]; then
-      # Fallback to matching arch pattern only
-      url=$(echo "$json" | jq -r --arg arch "$arch_pat" \
-        '.assets[] | select(.name | match($arch; "i")) | .browser_download_url' | head -n 1)
-    fi
+    chosen = cands[0]
+    digest = chosen.get("digest", "")
+    if digest.startswith("sha256:"):
+        digest = digest[7:].lower()
+    return chosen["browser_download_url"], digest, chosen["name"]
 
-    if [[ -n "$url" && "$url" != "null" ]]; then
-      echo "$url"
-      return 0
-    fi
-  fi
 
-  echo "Error: No matching asset found for repo '$repo' (pattern: '${pattern:-auto}', tag: '$tag')" >&2
-  return 1
-}
+def download(url, dest_path, expected_sha256=""):
+    """Download asset with SHA-256 verification and cache check."""
+    dest_path = Path(dest_path)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-gh_release_find_asset_digest() {
-  local repo="$1"
-  local pattern="${2:-}"
-  local tag="${3:-latest}"
+    if (
+        expected_sha256
+        and dest_path.is_file()
+        and sha256_file(dest_path) == expected_sha256
+    ):
+        return True
 
-  local json
-  json=$(gh_release_get_json "$repo" "$tag") || return 1
+    sys.stderr.write(f"Downloading {dest_path.name}...\n")
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "github-release-manager"}
+        )
+        with urllib.request.urlopen(req, timeout=120) as r, open(dest_path, "wb") as f:
+            shutil.copyfileobj(r, f)
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+        sys.stderr.write(f"Download failed: {e}\n")
+        return False
 
-  local digest=""
-  if [[ -n "$pattern" ]]; then
-    digest=$(echo "$json" | jq -r --arg pat "$pattern" '.assets[] | select(.name | match($pat; "i")) | .digest' | head -n 1)
-  else
-    local arch_pat os_pat
-    arch_pat=$(gh_detect_arch_pattern)
-    os_pat=$(gh_detect_os)
+    if expected_sha256 and sha256_file(dest_path) != expected_sha256:
+        sys.stderr.write(f"ERROR: Checksum mismatch for {dest_path.name}!\n")
+        dest_path.unlink(missing_ok=True)
+        return False
+    return True
 
-    digest=$(echo "$json" | jq -r --arg arch "$arch_pat" --arg os "$os_pat" \
-      '.assets[] | select((.name | match($arch; "i")) and (.name | match($os; "i"))) | .digest' | head -n 1)
 
-    if [[ -z "$digest" || "$digest" == "null" ]]; then
-      digest=$(echo "$json" | jq -r --arg arch "$arch_pat" \
-        '.assets[] | select(.name | match($arch; "i")) | .digest' | head -n 1)
-    fi
-  fi
+def is_executable(p):
+    """Check if file is an executable binary or AppImage."""
+    if not p.is_file() or p.is_symlink() or p.suffix.lower() in NON_BIN_EXTS:
+        return False
+    try:
+        with open(p, "rb") as f:
+            h = f.read(4)
+            is_elf_macho = h.startswith(b"\x7fELF") or h in (
+                b"\xcf\xfa\xed\xfe",
+                b"\xce\xfa\xed\xfe",
+                b"\xca\xfe\xba\xbe",
+            )
+            if is_elf_macho:
+                return True
+    except OSError:
+        pass
+    return os.access(p, os.X_OK) or p.suffix.lower() == ".appimage"
 
-  if [[ -n "$digest" && "$digest" != "null" ]]; then
-    echo "${digest#sha256:}"
-    return 0
-  fi
 
-  return 1
-}
+def extract(pkg, target_bin=""):
+    """Extract archive preserving POSIX permissions and locate executable binary."""
+    tmp = Path(tempfile.mkdtemp(prefix="grm_"))
+    s = str(pkg).lower()
 
-gh_release_download() {
-  local repo="$1"
-  local pattern="${2:-}"
-  local dest="${3:-.}"
-  local tag="${4:-latest}"
+    if s.endswith(".zip"):
+        with zipfile.ZipFile(pkg, "r") as zf:
+            for info in zf.infolist():
+                out = Path(zf.extract(info, tmp))
+                mode = (info.external_attr >> 16) & 0o777
+                if mode and out.is_file():
+                    os.chmod(out, mode)
+    elif any(s.endswith(x) for x in [".tar.gz", ".tgz", ".tar.xz", ".tar.bz2", ".tar"]):
+        with tarfile.open(pkg, "r:*") as tf:
+            kw = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+            tf.extractall(tmp, **kw)
+    else:
+        shutil.copy2(pkg, tmp / pkg.name)
 
-  local url
-  url=$(gh_release_find_asset_url "$repo" "$pattern" "$tag") || return 1
+    files = [Path(r) / f for r, _, fs in os.walk(tmp) for f in fs]
+    if target_bin:
+        match = [p for p in files if p.name == target_bin]
+        return (match[0] if match else None), tmp
 
-  local filename
-  filename=$(basename "$url")
+    execs = [p for p in files if is_executable(p)]
+    if not execs:
+        execs = [
+            p
+            for p in files
+            if os.access(p, os.X_OK) and p.suffix.lower() not in NON_BIN_EXTS
+        ]
+    if not execs:
+        execs = [p for p in files if p.suffix.lower() not in NON_BIN_EXTS]
+    return (max(execs, key=lambda f: f.stat().st_size) if execs else None), tmp
 
-  local target_path="$dest"
-  if [[ -d "$dest" ]]; then
-    target_path="${dest%/}/$filename"
-  fi
 
-  # Check if target file exists and matches API SHA256 digest
-  local expected_digest
-  expected_digest=$(gh_release_find_asset_digest "$repo" "$pattern" "$tag" 2>/dev/null || echo "")
+def create_desktop_entry(app_name, binary_path, is_gui=False, icon=""):
+    """Generate ~/.local/share/applications desktop entry for GUI apps or AppImages."""
+    is_linux = platform.system().lower() == "linux"
+    is_appimage = str(binary_path).lower().endswith(".appimage")
+    if not is_linux or (not is_gui and not is_appimage):
+        return
+    apps_dir = Path.home() / ".local" / "share" / "applications"
+    apps_dir.mkdir(parents=True, exist_ok=True)
+    icon_str = f"Icon={icon}\n" if icon else f"Icon={app_name}\n"
+    content = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={app_name.capitalize()}\n"
+        f"Exec={binary_path}\n"
+        f"{icon_str}"
+        "Terminal=false\n"
+        "Categories=Utility;\n"
+    )
+    (apps_dir / f"{app_name}.desktop").write_text(content)
 
-  if [[ -n "$expected_digest" && -f "$target_path" ]]; then
-    local current_hash
-    current_hash=$(sha256sum "$target_path" 2>/dev/null | awk '{print $1}')
-    if [[ "$current_hash" == "$expected_digest" ]]; then
-      echo "File $target_path already exists and matches remote SHA256 ($expected_digest). Skipping download." >&2
-      echo "$target_path"
-      return 0
-    fi
-  fi
 
-  echo "Downloading $filename from $url ..." >&2
-  if ! curl -L -f --connect-timeout 5 --max-time 120 -# -o "$target_path" "$url"; then
-    echo "Error: Download failed for $url (network offline or timed out)." >&2
-    return 1
-  fi
+def install_app(
+    repo,
+    pattern="",
+    bin_name="",
+    name="",
+    dir="~/.local/bin",
+    tag="latest",
+    force=False,
+    gui=False,
+    icon="",
+):
+    """Install application into isolated storage and update atomic symlink."""
+    app_name = name or bin_name or repo.split("/")[-1]
+    target_dir = Path(dir).expanduser()
+    symlink_path = target_dir / app_name
 
-  if [[ -n "$expected_digest" && -f "$target_path" ]]; then
-    local downloaded_hash
-    downloaded_hash=$(sha256sum "$target_path" 2>/dev/null | awk '{print $1}')
-    if [[ "$downloaded_hash" != "$expected_digest" ]]; then
-      echo "Warning: Downloaded file SHA256 ($downloaded_hash) does not match expected digest ($expected_digest)" >&2
-    fi
-  fi
+    tag_path = "latest" if tag == "latest" else f"tags/{tag}"
+    rel = gh_api(f"https://api.github.com/repos/{repo}/releases/{tag_path}")
+    cur_tag = rel.get("tag_name") if rel else None
+    if not cur_tag:
+        if symlink_path.exists():
+            return True
+        sys.stderr.write(f"Error: API failed and binary missing for {app_name}\n")
+        return False
 
-  echo "$target_path"
-}
+    app_dir = APPS_DIR / app_name
+    ver_dir = app_dir / cur_tag
+    dest_bin = ver_dir / (bin_name or app_name)
+    if (
+        not force
+        and dest_bin.is_file()
+        and symlink_path.exists()
+        and symlink_path.resolve() == dest_bin.resolve()
+    ):
+        sys.stderr.write(f"{app_name} is up-to-date ({cur_tag}).\n")
+        return True
 
-# --- Installer Helper ---
-gh_release_install() {
-  local repo=""
-  local pattern=""
-  local bin_name=""
-  local custom_name=""
-  local dest_dir="$HOME/.local/bin"
-  local tag="latest"
-  local force=false
+    url, digest, asset_name = find_asset(repo, pattern, tag)
+    if not url:
+        sys.stderr.write(f"Error: No asset match for {repo} ({cur_tag})\n")
+        return False
 
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --pattern|-p) pattern="$2"; shift 2 ;;
-      --bin|-b) bin_name="$2"; shift 2 ;;
-      --name|-n) custom_name="$2"; shift 2 ;;
-      --dir|-d) dest_dir="$2"; shift 2 ;;
-      --tag|-t) tag="$2"; shift 2 ;;
-      --force|-f) force=true; shift 1 ;;
-      *)
-        if [[ -z "$repo" ]]; then
-          repo="$1"; shift 1
-        else
-          echo "Error: Unknown parameter '$1'" >&2; return 1
-        fi
-        ;;
-    esac
-  done
+    dl_dir = CACHE_DIR / "downloads"
+    dl_file = dl_dir / (f"{digest}_{asset_name}" if digest else asset_name)
+    if not download(url, dl_file, digest):
+        return False
 
-  if [[ -z "$repo" ]]; then
-    echo "Error: Repo parameter is required for gh_release_install" >&2
-    return 1
-  fi
+    bin_file, tmp = extract(dl_file, bin_name)
+    if not bin_file:
+        sys.stderr.write(f"Error: Executable not found in {asset_name}\n")
+        shutil.rmtree(tmp, ignore_errors=True)
+        return False
 
-  local out_name
-  if [[ -n "$custom_name" ]]; then
-    out_name="$custom_name"
-  elif [[ -n "$bin_name" ]]; then
-    out_name="$bin_name"
-  else
-    out_name=$(basename "$repo")
-  fi
-  local final_path="$dest_dir/$out_name"
+    ver_dir.mkdir(parents=True, exist_ok=True)
+    final_bin = ver_dir / bin_file.name
+    shutil.copy2(bin_file, final_bin)
+    final_bin.chmod(0o755)
+    shutil.rmtree(tmp, ignore_errors=True)
 
-  local current_tag
-  if ! current_tag=$(gh_release_latest_tag "$repo" 2>/dev/null); then
-    if [[ -x "$final_path" ]]; then
-      echo "Warning: Unable to reach GitHub. Using existing installed binary at $final_path" >&2
-      return 0
-    else
-      echo "Error: Could not reach GitHub API for '$repo' and no existing binary was found at $final_path" >&2
-      return 1
-    fi
-  fi
+    create_desktop_entry(app_name, final_bin, is_gui=gui, icon=icon)
 
-  local tag_file="${HOME}/.cache/github-release-manager/${repo//\//_}.tag"
-  mkdir -p "$(dirname "$tag_file")"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    tmp_link = target_dir / f".tmp_{app_name}_{os.getpid()}"
+    tmp_link.unlink(missing_ok=True)
+    tmp_link.symlink_to(final_bin)
+    tmp_link.replace(symlink_path)
 
-  if [[ "$force" == "false" && -f "$tag_file" ]]; then
-    local installed_tag
-    installed_tag=$(cat "$tag_file")
-    if [[ "$installed_tag" == "$current_tag" && -x "$final_path" ]]; then
-      echo "$repo is already up-to-date ($current_tag)." >&2
-      return 0
-    fi
-  fi
+    # Auto-cleanup previous version directories for this app
+    if app_dir.exists():
+        for old_ver in app_dir.iterdir():
+            if old_ver.is_dir() and old_ver.name != cur_tag:
+                shutil.rmtree(old_ver, ignore_errors=True)
+                sys.stderr.write(
+                    f"Cleaned up previous version: {app_name}/{old_ver.name}\n"
+                )
 
-  local temp_dir
-  temp_dir=$(mktemp -d)
-  # shellcheck disable=SC2064
-  trap "rm -rf '$temp_dir'" EXIT
+    sys.stderr.write(f"Installed {app_name} ({cur_tag}) -> {symlink_path}\n")
+    return True
 
-  local downloaded_file
-  if ! downloaded_file=$(gh_release_download "$repo" "$pattern" "$temp_dir" "$tag"); then
-    if [[ -x "$final_path" ]]; then
-      echo "Warning: Download failed. Using existing installed binary at $final_path" >&2
-      return 0
-    else
-      echo "Error: Download failed and no existing binary found at $final_path" >&2
-      return 1
-    fi
-  fi
 
-  local filename
-  filename=$(basename "$downloaded_file")
-  local lower_filename
-  lower_filename=$(echo "$filename" | tr '[:upper:]' '[:lower:]')
+def load_cfg():
+    """Load TOML configuration."""
+    if not CONFIG_FILE.is_file():
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_FILE.write_text(DEFAULT_CONFIG_TEMPLATE)
+    with open(CONFIG_FILE, "rb") as f:
+        return tomllib.load(f)
 
-  mkdir -p "$dest_dir"
 
-  local target_bin=""
-  if [[ "$lower_filename" == *.tar.gz || "$lower_filename" == *.tgz || "$lower_filename" == *.tar.xz || "$lower_filename" == *.tar.bz2 || "$lower_filename" == *.zip ]]; then
-    echo "Extracting archive $filename ..." >&2
-    mkdir -p "$temp_dir/extracted"
-    if [[ "$lower_filename" == *.zip ]]; then
-      unzip -q "$downloaded_file" -d "$temp_dir/extracted"
-    else
-      tar -xf "$downloaded_file" -C "$temp_dir/extracted"
-    fi
+def save_cfg(cfg):
+    """Save TOML configuration."""
+    lines = ["# github-release-manager configuration file\n"]
+    for app_name, opts in cfg.items():
+        lines.append(f"[{app_name}]")
+        for k, v in opts.items():
+            val = str(v).lower() if isinstance(v, bool) else f'"{v}"'
+            lines.append(f"{k} = {val}")
+        lines.append("")
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text("\n".join(lines) + "\n")
 
-    if [[ -n "$bin_name" ]]; then
-      target_bin=$(find "$temp_dir/extracted" -type f -name "$bin_name" | head -n 1)
-    else
-      target_bin=$(find "$temp_dir/extracted" -type f -executable ! -name "*.dll" ! -name "*.so" ! -name "*.dylib" ! -name "*.txt" ! -name "*.md" | head -n 1)
-      if [[ -z "$target_bin" ]]; then
-        target_bin=$(find "$temp_dir/extracted" -type f ! -name "*.dll" ! -name "*.so" ! -name "*.txt" ! -name "*.md" ! -name "*.json" ! -name "*.xml" | head -n 1)
-      fi
-    fi
 
-    if [[ -z "$target_bin" ]]; then
-      echo "Error: Could not locate executable binary in extracted package" >&2
-      return 1
-    fi
-  else
-    target_bin="$downloaded_file"
-  fi
+def get_app_status(app_name, v):
+    """Check installed vs latest version for an app."""
+    target = Path(v.get("dir", "~/.local/bin")).expanduser()
+    symlink = target / (v.get("name") or app_name)
+    if symlink.is_symlink() and symlink.exists():
+        installed = symlink.resolve().parent.name
+    elif symlink.exists():
+        installed = "Installed"
+    else:
+        installed = "Not Installed"
 
-  mv "$target_bin" "$final_path"
-  chmod +x "$final_path"
-  echo "$current_tag" > "$tag_file"
-  echo "Successfully installed $out_name ($current_tag) to $final_path" >&2
-}
+    rel = gh_api(f"https://api.github.com/repos/{v['repo']}/releases/latest")
+    latest = rel.get("tag_name", "Error") if rel else "Error"
 
-# --- CLI Functionality ---
-github_release_manager_usage() {
-  cat <<'EOF'
-github-release-manager - Download and manage GitHub releases
+    if installed == "Not Installed":
+        status = "Not Installed"
+    elif installed == latest:
+        status = "Up to date"
+    else:
+        status = f"Update available ({latest})"
+    return app_name, v["repo"], installed, latest, status
 
-Usage:
-  github-release-manager <command> [options]
 
-Commands:
-  latest <owner/repo>
-      Print the latest release tag name.
+def check_all():
+    """Check update status for all configured apps."""
+    cfg = load_cfg()
+    if not cfg:
+        print("No apps configured.")
+        return True
+    header = f"{'APP':<16} {'REPO':<28} {'INSTALLED':<14} {'LATEST':<14} {'STATUS':<20}"
+    print(header)
+    print("-" * 92)
+    for app, v in cfg.items():
+        a, r, i, l, s = get_app_status(app, v)
+        print(f"{a:<16} {r:<28} {i:<14} {l:<14} {s:<20}")
+    return True
 
-  list <owner/repo> [tag]
-      List all assets, SHA256 digests, and download URLs for a release.
 
-  url <owner/repo> [pattern] [tag]
-      Get download URL matching a regex pattern (or auto-detected system arch/OS).
+def prompt(msg: str, default: str = "") -> str:
+    """Prompt user for input safely handling EOF and cancellation."""
+    try:
+        val = input(msg).strip()
+        return val if val else default
+    except (EOFError, KeyboardInterrupt):
+        sys.stderr.write("\nOperation cancelled.\n")
+        sys.exit(1)
 
-  digest <owner/repo> [pattern] [tag]
-      Get SHA256 digest matching a regex pattern (or auto-detected system arch/OS).
 
-  download <owner/repo> [pattern] [dest] [tag]
-      Download matching asset to target file or directory (skips if existing file matches SHA256).
+def update_all(skip_prompt: bool = False) -> bool:
+    """Check and update all configured applications sequentially."""
+    cfg = load_cfg()
+    if not cfg:
+        print("No apps configured.")
+        return True
 
-  install <owner/repo> [options]
-      Download, extract, and install executable to target directory.
-      Options:
-        -p, --pattern REGEX    Asset matching pattern
-        -b, --bin NAME         Executable filename inside archive
-        -n, --name NAME        Installed target filename
-        -d, --dir PATH         Installation directory (default: ~/.local/bin)
-        -t, --tag TAG          Release tag (default: latest)
-        -f, --force            Force re-install even if tag matches
+    sys.stderr.write("Checking for updates...\n")
+    updates = []
+    for app, v in cfg.items():
+        _, _, i, l, s = get_app_status(app, v)
+        if s.startswith("Update available") or i == "Not Installed":
+            updates.append((app, v, i, l))
 
-  arch
-      Print auto-detected architecture and OS regex patterns.
+    if not updates:
+        print("All applications are up to date.")
+        return True
 
-EOF
-}
+    print("\nAvailable updates:\n")
+    print(f"{'APP':<16} {'CURRENT':<16} {'NEW VERSION':<16}")
+    print("-" * 48)
+    for app, v, i, l in updates:
+        print(f"{app:<16} {i:<16} {l:<16}")
 
-github_release_manager_main() {
-  if [[ $# -lt 1 ]]; then
-    github_release_manager_usage
-    return 1
-  fi
+    if not skip_prompt:
+        if not sys.stdin.isatty():
+            sys.stderr.write(
+                "Non-interactive terminal detected. Use -y / --yes to proceed automatically.\n"
+            )
+            return False
+        ans = prompt(f"\nProceed with updating {len(updates)} app(s)? [y/N]: ").lower()
+        if ans not in ("y", "yes"):
+            print("Update cancelled.")
+            return True
 
-  local command="$1"
-  shift
+    print()
+    res = True
+    for app, v, _, _ in updates:
+        ok = install_app(
+            v["repo"],
+            v.get("pattern", ""),
+            v.get("bin", ""),
+            v.get("name", app),
+            v.get("dir", "~/.local/bin"),
+            v.get("tag", "latest"),
+            v.get("force", False),
+            v.get("gui", False),
+            v.get("icon", ""),
+        )
+        if not ok:
+            res = False
+    return res
 
-  case "$command" in
-    latest)
-      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager latest <owner/repo>" >&2; return 1; fi
-      gh_release_latest_tag "$1"
-      ;;
-    list)
-      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager list <owner/repo> [tag]" >&2; return 1; fi
-      gh_release_list_assets "$@"
-      ;;
-    url)
-      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager url <owner/repo> [pattern] [tag]" >&2; return 1; fi
-      gh_release_find_asset_url "$@"
-      ;;
-    digest)
-      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager digest <owner/repo> [pattern] [tag]" >&2; return 1; fi
-      gh_release_find_asset_digest "$@"
-      ;;
-    download)
-      if [[ $# -lt 1 ]]; then echo "Usage: github-release-manager download <owner/repo> [pattern] [dest] [tag]" >&2; return 1; fi
-      gh_release_download "$@"
-      ;;
-    install)
-      gh_release_install "$@"
-      ;;
-    arch)
-      local arch pat os
-      arch=$(gh_detect_arch)
-      pat=$(gh_detect_arch_pattern)
-      os=$(gh_detect_os)
-      echo "Detected System Information:"
-      echo "  OS:           $os"
-      echo "  Arch:         $arch"
-      echo "  Arch Pattern: $pat"
-      ;;
-    -h|--help|help)
-      github_release_manager_usage
-      ;;
-    *)
-      echo "Error: Unknown command '$command'" >&2
-      github_release_manager_usage
-      return 1
-      ;;
-  esac
-}
 
-# --- Sourced vs Direct Execution Guard ---
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  github_release_manager_main "$@"
-fi
+def add_app(repo: str) -> bool:
+    """Interactive wizard to configure a new GitHub repository."""
+    if "/" not in repo:
+        sys.stderr.write("Error: Repo must be in 'owner/repo' format.\n")
+        return False
+
+    if not sys.stdin.isatty():
+        sys.stderr.write("Error: Interactive terminal required for 'add' command.\n")
+        return False
+
+    rel = gh_api(f"https://api.github.com/repos/{repo}/releases/latest")
+    if not rel or "assets" not in rel:
+        sys.stderr.write("Error fetching release.\n")
+        return False
+
+    _, os_pat, _, arch_pat = detect_sys()
+    assets = rel["assets"]
+    print(f"\nLatest release for {repo} ({rel.get('tag_name', 'latest')}):\n")
+    for idx, a in enumerate(assets, 1):
+        is_rec = re.search(arch_pat, a["name"], re.IGNORECASE) and re.search(
+            os_pat, a["name"], re.IGNORECASE
+        )
+        rec = " [RECOMMENDED]" if is_rec else ""
+        print(f"  [{idx:2d}] {a['name']}{rec}")
+
+    try:
+        chosen_idx = int(prompt("\nSelect asset number: ")) - 1
+        chosen = assets[chosen_idx]
+    except (ValueError, IndexError):
+        sys.stderr.write("Invalid selection.\n")
+        return False
+
+    def_pat = re.escape(chosen["name"])
+    pat = prompt(f"Asset pattern regex [default: {def_pat}]: ", def_pat)
+
+    def_name = repo.split("/")[-1]
+    app_name = prompt(f"Command name [default: {def_name}]: ", def_name)
+    bin_name = prompt("Binary filename inside archive (optional): ")
+    is_gui = prompt("Is this a GUI application? [y/N]: ").lower() in ("y", "yes")
+
+    cfg = load_cfg()
+    cfg[app_name] = {"repo": repo, "pattern": pat}
+    if bin_name:
+        cfg[app_name]["bin"] = bin_name
+    if app_name != def_name:
+        cfg[app_name]["name"] = app_name
+    if is_gui:
+        cfg[app_name]["gui"] = True
+    save_cfg(cfg)
+
+    if prompt("Install now? [Y/n]: ", "y").lower() in ("y", "yes"):
+        return install_app(repo, pat, bin_name, app_name, gui=is_gui)
+    return True
+
+
+def remove_app(app_name):
+    """Remove application configuration and files."""
+    cfg = load_cfg()
+    if app_name not in cfg:
+        sys.stderr.write(f"App '{app_name}' not found.\n")
+        return False
+    opts = cfg.pop(app_name)
+    save_cfg(cfg)
+
+    target_bin = Path(opts.get("dir", "~/.local/bin")).expanduser() / (
+        opts.get("name") or app_name
+    )
+    target_bin.unlink(missing_ok=True)
+    shutil.rmtree(APPS_DIR / app_name, ignore_errors=True)
+    desktop_file = (
+        Path.home() / ".local" / "share" / "applications" / f"{app_name}.desktop"
+    )
+    desktop_file.unlink(missing_ok=True)
+    sys.stderr.write(f"Removed [{app_name}].\n")
+    return True
+
+
+def prune():
+    """Remove inactive app versions and download cache."""
+    cfg = load_cfg()
+    active = set()
+    for app, v in cfg.items():
+        sym = Path(v.get("dir", "~/.local/bin")).expanduser() / (v.get("name") or app)
+        if sym.is_symlink():
+            active.add(sym.resolve())
+
+    count = 0
+    if APPS_DIR.exists():
+        for app_dir in APPS_DIR.iterdir():
+            if app_dir.is_dir():
+                for ver in app_dir.iterdir():
+                    if ver.is_dir():
+                        is_active = any(
+                            (ver / f).resolve() in active for f in os.listdir(ver)
+                        )
+                        if not is_active:
+                            shutil.rmtree(ver, ignore_errors=True)
+                            count += 1
+    shutil.rmtree(CACHE_DIR / "downloads", ignore_errors=True)
+    sys.stderr.write(
+        f"Pruned {count} inactive version(s) and cleared download cache.\n"
+    )
+    return True
+
+
+def main():
+    p = argparse.ArgumentParser(description="GitHub Release Manager")
+    sub = p.add_subparsers(dest="cmd")
+
+    up = sub.add_parser("update-all")
+    up.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt")
+
+    sub.add_parser("list")
+    sub.add_parser("check")
+    sub.add_parser("prune")
+
+    add_p = sub.add_parser("add")
+    add_p.add_argument("repo", help="GitHub repo (owner/repo)")
+
+    rm_p = sub.add_parser("remove")
+    rm_p.add_argument("app", help="Application name to remove")
+
+    inst = sub.add_parser("install")
+    inst.add_argument("target", nargs="?", default="", help="App name or owner/repo")
+    inst.add_argument("-p", "--pattern", default="")
+    inst.add_argument("-b", "--bin", default="")
+    inst.add_argument("-n", "--name", default="")
+    inst.add_argument("-d", "--dir", default="~/.local/bin")
+    inst.add_argument("-t", "--tag", default="latest")
+    inst.add_argument("-f", "--force", action="store_true")
+    inst.add_argument("-g", "--gui", action="store_true")
+
+    sub.add_parser("arch")
+
+    args = p.parse_args()
+    cmd = args.cmd or "update-all"
+
+    if cmd == "update-all":
+        sys.exit(0 if update_all(skip_prompt=getattr(args, "yes", False)) else 1)
+    elif cmd == "check":
+        sys.exit(0 if check_all() else 1)
+    elif cmd == "list":
+        cfg = load_cfg()
+        if not cfg:
+            print("No apps configured.")
+            sys.exit(0)
+        print(f"{'APP':<16} {'REPO':<30} {'STATUS':<20}")
+        print("-" * 68)
+        for k, v in cfg.items():
+            sym = Path(v.get("dir", "~/.local/bin")).expanduser() / (v.get("name") or k)
+            if sym.is_symlink() and sym.exists():
+                tag = sym.resolve().parent.name
+            elif sym.exists():
+                tag = "Installed"
+            else:
+                tag = "Not Installed"
+            print(f"{k:<16} {v['repo']:<30} {tag:<20}")
+        sys.exit(0)
+    elif cmd == "add":
+        sys.exit(0 if add_app(args.repo) else 1)
+    elif cmd == "remove":
+        sys.exit(0 if remove_app(args.app) else 1)
+    elif cmd == "prune":
+        sys.exit(0 if prune() else 1)
+    elif cmd == "arch":
+        s, op, a, ap = detect_sys()
+        print(f"Detected System:\n  OS:   {s} ({op})\n  Arch: {a} ({ap})")
+        sys.exit(0)
+    elif cmd == "install":
+        if not args.target:
+            sys.exit(0 if update_all(skip_prompt=getattr(args, "yes", False)) else 1)
+        cfg = load_cfg()
+        if args.target in cfg:
+            v = cfg[args.target]
+            res = install_app(
+                v["repo"],
+                v.get("pattern", args.pattern),
+                v.get("bin", args.bin),
+                v.get("name", args.name),
+                v.get("dir", args.dir),
+                v.get("tag", args.tag),
+                args.force or v.get("force", False),
+                args.gui or v.get("gui", False),
+                v.get("icon", ""),
+            )
+        elif "/" in args.target:
+            res = install_app(
+                args.target,
+                args.pattern,
+                args.bin,
+                args.name,
+                args.dir,
+                args.tag,
+                args.force,
+                args.gui,
+            )
+        else:
+            sys.stderr.write(f"Error: Unknown app {args.target}\n")
+            res = False
+        sys.exit(0 if res else 1)
+
+
+if __name__ == "__main__":
+    main()

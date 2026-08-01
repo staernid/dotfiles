@@ -36,6 +36,9 @@ alias adog="git log --all --decorate --oneline --graph"
 alias gpr="gh pr checkout"
 alias gpv="gh pr view --web"
 
+# Python
+alias pycheck='ruff check --fix "$@" && ruff format "$@" && mypy "$@"'
+
 # Wayland Clipboard shortcuts
 if command -v wl-copy &>/dev/null; then
   alias cpy="wl-copy"

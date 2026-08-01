@@ -7,6 +7,9 @@
 *.tdb
 *.bak
 *.zcompdum*
+__pycache__/
+*.py[cod]
+
 
 # Machine specific configs/junk
 pipewire/

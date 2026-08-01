@@ -39,6 +39,7 @@ _add_to_path "$GOPATH/bin"
 _add_to_path "$CARGO_HOME/bin"
 _add_to_path "$HOME/scripts"
 _add_to_path "$HOME/.local/bin/cron"
+_add_to_path "$HOME/.local/bin/github-release-manager"
 _add_to_path "$HOME/.local/bin"
 [ -n "$PREFIX" ] && _add_to_path "$PREFIX/bin"
 
