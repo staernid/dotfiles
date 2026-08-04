@@ -66,23 +66,23 @@ fi
 # Package definitions
 
 # Fedora
-FEDORA_CLI="git neovim stow fzf zoxide direnv ripgrep fd-find btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
+FEDORA_CLI="git zsh neovim stow fzf zoxide direnv ripgrep fd-find btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
 FEDORA_DEV="gh tmux syncthing unzip ShellCheck git-delta entr hyperfine trash-cli @development-tools"
 FEDORA_GUI="firefox mpv zathura zathura-pdf-mupdf wl-clipboard scrcpy atool ImageMagick poppler-utils"
 FEDORA_GAMING="steam lutris mangohud gamemode"
 
 # Arch Linux
-ARCH_CLI="git neovim stow fzf zoxide direnv ripgrep fd btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
+ARCH_CLI="git zsh neovim stow fzf zoxide direnv ripgrep fd btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
 ARCH_DEV="github-cli tmux syncthing unzip shellcheck git-delta entr hyperfine trash-cli base-devel"
 ARCH_GUI="firefox mpv zathura zathura-pdf-mupdf wl-clipboard scrcpy atool imagemagick poppler"
 
 # Debian / Ubuntu
-DEBIAN_CLI="git neovim stow fzf zoxide direnv ripgrep fd-find btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
+DEBIAN_CLI="git zsh neovim stow fzf zoxide direnv ripgrep fd-find btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
 DEBIAN_DEV="gh tmux syncthing unzip shellcheck git-delta entr hyperfine trash-cli build-essential"
 DEBIAN_GUI="firefox mpv zathura zathura-pdf-poppler wl-clipboard scrcpy atool imagemagick poppler-utils"
 
 # Termux
-TERMUX_CLI="git neovim stow fzf zoxide direnv ripgrep fd btop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv tmux unzip"
+TERMUX_CLI="git zsh neovim stow fzf zoxide direnv ripgrep fd btop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv tmux unzip"
 
 # Install function wrapper
 run_install() {
