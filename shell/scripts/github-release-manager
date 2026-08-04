@@ -381,22 +381,52 @@ def install_app(
     return True
 
 
-def load_cfg():
-    """Load TOML configuration."""
+def load_cfg() -> dict[str, dict[str, Any]]:
+    """Load TOML configuration with auto-repair for legacy unescaped backslashes."""
     if not CONFIG_FILE.is_file():
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(DEFAULT_CONFIG_TEMPLATE)
-    with open(CONFIG_FILE, "rb") as f:
-        return tomllib.load(f)
+    try:
+        with open(CONFIG_FILE, "rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError:
+        text = CONFIG_FILE.read_text(encoding="utf-8")
+        fixed_lines = []
+        for line in text.splitlines():
+            if "=" in line:
+                key, _, val = line.partition("=")
+                key, val = key.strip(), val.strip()
+                if val.startswith('"') and val.endswith('"') and "\\" in val:
+                    raw_val = val[1:-1]
+                    if "'" not in raw_val:
+                        val = f"'{raw_val}'"
+                    else:
+                        escaped = raw_val.replace("\\", "\\\\")
+                        val = f'"{escaped}"'
+                fixed_lines.append(f"{key} = {val}")
+            else:
+                fixed_lines.append(line)
+        cleaned_text = "\n".join(fixed_lines) + "\n"
+        data = tomllib.loads(cleaned_text)
+        CONFIG_FILE.write_text(cleaned_text, encoding="utf-8")
+        return data
 
 
-def save_cfg(cfg):
-    """Save TOML configuration."""
+def save_cfg(cfg: dict[str, dict[str, Any]]) -> None:
+    """Save TOML configuration using TOML literal strings for pattern values."""
     lines = ["# github-release-manager configuration file\n"]
     for app_name, opts in cfg.items():
         lines.append(f"[{app_name}]")
         for k, v in opts.items():
-            val = str(v).lower() if isinstance(v, bool) else f'"{v}"'
+            if isinstance(v, bool):
+                val = str(v).lower()
+            elif isinstance(v, (int, float)):
+                val = str(v)
+            elif "'" not in str(v):
+                val = f"'{v!s}'"
+            else:
+                escaped = str(v).replace("\\", "\\\\").replace('"', '\\"')
+                val = f'"{escaped}"'
             lines.append(f"{k} = {val}")
         lines.append("")
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
