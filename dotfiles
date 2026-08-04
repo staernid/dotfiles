@@ -1,0 +1,355 @@
+#!/usr/bin/env bash
+# dotfiles — Unified management CLI for minimalist dotfiles
+#
+# Usage:
+#   ./dotfiles                  deploy (stow) packages
+#   ./dotfiles prepare          install OS package dependencies
+#   ./dotfiles secrets          pull SSH keys & secrets from Bitwarden
+#   ./dotfiles unstow           revert (unstow) all packages
+#   ./dotfiles help             show this help menu
+
+set -eo pipefail
+
+DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DOTFILES_DIR"
+
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_CONFIG_HOME
+
+# Color helpers
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# ── 1. OS Detection ───────────────────────────
+detect_os() {
+  if [ -n "${TERMUX_VERSION:-}" ] || ([ -n "${PREFIX:-}" ] && [ -d "${PREFIX:-}/bin" ]); then
+    echo "termux"
+  elif [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case "${ID:-}" in
+      fedora) echo "fedora" ;;
+      arch|manjaro|endeavouros) echo "arch" ;;
+      debian|ubuntu|pop|mint) echo "debian" ;;
+      *)
+        if [[ "${ID_LIKE:-}" =~ fedora ]]; then echo "fedora";
+        elif [[ "${ID_LIKE:-}" =~ arch ]]; then echo "arch";
+        elif [[ "${ID_LIKE:-}" =~ debian ]]; then echo "debian";
+        else echo "unknown"; fi
+        ;;
+    esac
+  else
+    echo "unknown"
+  fi
+}
+
+install_pkg() {
+  local os="$1"
+  shift
+  case "$os" in
+    termux) pkg install -y "$@" ;;
+    arch) sudo pacman -S --needed --noconfirm "$@" ;;
+    fedora)
+      if command -v dnf5 &>/dev/null; then
+        sudo dnf5 install -y "$@"
+      else
+        sudo dnf install -y "$@"
+      fi
+      ;;
+    debian) sudo apt-get update -qq && sudo apt-get install -y "$@" ;;
+    *)
+      echo -e "${YELLOW}Unknown OS — please install manually: $*${NC}"
+      return 1
+      ;;
+  esac
+}
+
+# ── 2. Command: Help ──────────────────────────
+cmd_help() {
+  echo -e "${BOLD}dotfiles${NC} — Unified management CLI for dotfiles"
+  echo ""
+  echo -e "${BOLD}USAGE:${NC}"
+  echo "  ./dotfiles [command] [options]"
+  echo ""
+  echo -e "${BOLD}COMMANDS:${NC}"
+  echo "  deploy, stow      Deploy (stow) configured dotfile packages (default)"
+  echo "  prepare, deps     Install system package dependencies for your OS"
+  echo "  secrets, bw       Pull SSH keys and secrets from Bitwarden"
+  echo "  unstow, revert    Unstow configured dotfile packages"
+  echo "  help, -h          Show this help message"
+  echo ""
+  echo -e "${BOLD}PREPARE OPTIONS:${NC}"
+  echo "  -n, --dry-run     Show package install commands without executing"
+  echo "  -y, --yes         Automatically answer yes to prompts"
+  echo "  --cli-only        Skip GUI/desktop packages even on desktop OS"
+  echo ""
+  echo -e "${BOLD}SECRETS OPTIONS:${NC}"
+  echo "  -y, --force       Overwrite existing secret files without prompting"
+  echo ""
+  echo -e "${BOLD}STOW OPTIONS:${NC}"
+  echo "  -D, --delete      Unstow package files"
+  echo "  --adopt           Adopt existing files into stow package"
+}
+
+# ── 3. Command: Prepare ───────────────────────
+cmd_prepare() {
+  local dry_run=false auto_yes=false cli_only=false
+
+  for arg in "$@"; do
+    case "$arg" in
+      -n|--dry-run) dry_run=true ;;
+      -y|--yes) auto_yes=true ;;
+      --cli-only) cli_only=true ;;
+      -h|--help)
+        echo "Usage: ./dotfiles prepare [-n|--dry-run] [-y|--yes] [--cli-only]"
+        return 0
+        ;;
+    esac
+  done
+
+  local os
+  os=$(detect_os)
+  echo -e "${BOLD}${BLUE}==> Detected OS:${NC} ${GREEN}$os${NC}"
+
+  if [ "$os" = "termux" ]; then
+    echo -e "${YELLOW}Termux detected: forcing --cli-only mode.${NC}"
+    cli_only=true
+  fi
+
+  local fedora_cli="git zsh neovim stow fzf zoxide direnv ripgrep fd-find btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
+  local fedora_dev="gh tmux syncthing unzip ShellCheck git-delta entr hyperfine trash-cli @development-tools"
+  local fedora_gui="firefox mpv zathura zathura-pdf-mupdf wl-clipboard scrcpy atool ImageMagick poppler-utils"
+  local fedora_gaming="steam lutris mangohud gamemode"
+
+  local arch_cli="git zsh neovim stow fzf zoxide direnv ripgrep fd btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
+  local arch_dev="github-cli tmux syncthing unzip shellcheck git-delta entr hyperfine trash-cli base-devel"
+  local arch_gui="firefox mpv zathura zathura-pdf-mupdf wl-clipboard scrcpy atool imagemagick poppler"
+
+  local debian_cli="git zsh neovim stow fzf zoxide direnv ripgrep fd-find btop nvtop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv"
+  local debian_dev="gh tmux syncthing unzip shellcheck git-delta entr hyperfine trash-cli build-essential"
+  local debian_gui="firefox mpv zathura zathura-pdf-poppler wl-clipboard scrcpy atool imagemagick poppler-utils"
+
+  local termux_cli="git zsh neovim stow fzf zoxide direnv ripgrep fd btop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv tmux unzip"
+
+  run_inst() {
+    local c="$1"
+    echo -e "${BOLD}${BLUE}==> Executing:${NC} $c"
+    if [ "$dry_run" = true ]; then
+      echo -e "${YELLOW}[DRY RUN] Would execute:${NC} $c"
+    else
+      eval "$c"
+    fi
+  }
+
+  case "$os" in
+    fedora)
+      local pkg_cmd
+      if command -v dnf5 &>/dev/null; then pkg_cmd="sudo dnf5 install -y"; else pkg_cmd="sudo dnf install -y"; fi
+      local pkgs="$fedora_cli $fedora_dev"
+      [ "$cli_only" = false ] && pkgs="$pkgs $fedora_gui"
+      run_inst "$pkg_cmd $pkgs"
+
+      if [ "$cli_only" = false ]; then
+        local inst_gaming=false
+        if [ "$auto_yes" = true ]; then
+          inst_gaming=true
+        else
+          echo -e "\n${BOLD}${YELLOW}Would you like to install Fedora gaming packages? (${fedora_gaming})${NC}"
+          read -rp "Install gaming packages? [y/N]: " resp </dev/tty || true
+          case "$resp" in [yY][eE][sS]|[yY]) inst_gaming=true ;; esac
+        fi
+        [ "$inst_gaming" = true ] && run_inst "$pkg_cmd $fedora_gaming"
+      fi
+      ;;
+    arch)
+      local pkgs="$arch_cli $arch_dev"
+      [ "$cli_only" = false ] && pkgs="$pkgs $arch_gui"
+      run_inst "sudo pacman -S --needed --noconfirm $pkgs"
+      ;;
+    debian)
+      run_inst "sudo apt update"
+      local pkgs="$debian_cli $debian_dev"
+      [ "$cli_only" = false ] && pkgs="$pkgs $debian_gui"
+      run_inst "sudo apt install -y $pkgs"
+      ;;
+    termux)
+      run_inst "pkg install -y $termux_cli"
+      ;;
+    *)
+      echo -e "${RED}Unsupported OS. Please install dependencies manually.${NC}"
+      return 1
+      ;;
+  esac
+
+  echo -e "\n${GREEN}${BOLD}✓ System preparation complete!${NC}"
+  echo -e "Next step: Run ${BOLD}./dotfiles${NC} to stow your dotfile packages."
+  echo ""
+  echo -e "${BOLD}Gaming Save Sync & Backup Tips:${NC}"
+  echo -e "  • ${BOLD}Syncthing:${NC} Point Syncthing to ${BOLD}~/Games/GSE Saves${NC} or ${BOLD}~/Games/unity3d${NC} to sync saves cross-device"
+  echo -e "  • ${BOLD}Ludusavi:${NC}  Use Ludusavi to backup game saves (available via ${BOLD}github-release-manager${NC})"
+}
+
+# ── 4. Command: Secrets ───────────────────────
+cmd_secrets() {
+  umask 077
+  local force=false
+
+  for arg in "$@"; do
+    case "$arg" in
+      -y|--force) force=true ;;
+      -h|--help)
+        echo "Usage: ./dotfiles secrets [-y|--force]"
+        return 0
+        ;;
+    esac
+  done
+
+  echo -e "${BOLD}${BLUE}==> Bitwarden Secrets Provisioning${NC}"
+  echo -e "Secrets are stored as Bitwarden items named ${BOLD}dotfiles/<path>${NC} (restored to ${BOLD}~/<path>${NC})."
+  echo -e "Examples:"
+  echo -e "  • SSH Keys:       ${BOLD}dotfiles/.ssh/<key_name>${NC} (SSH key item or secure note)"
+  echo -e "  • Gaming Config:  ${BOLD}dotfiles/.local/share/GSE Saves/settings/configs.user.ini${NC}"
+  echo -e "    ${YELLOW}Sample content:${NC}"
+  echo -e "      [user::general]"
+  echo -e "      account_steamid=my_steamid_here"
+  echo -e "      account_name=my_username_here"
+  echo -e "      language=english"
+  echo -e "      ip_country=US"
+  echo ""
+
+  if ! command -v bw &>/dev/null; then
+    echo -e "${RED}bw CLI not found.${NC} Ensure the 'shell' package is stowed or install Bitwarden CLI, then run: bw login"
+    return 1
+  fi
+  local bw_bin
+  bw_bin="$(command -v bw)"
+
+  local bw_status
+  bw_status="$("$bw_bin" status | jq -r '.status')"
+
+  case "$bw_status" in
+    unauthenticated)
+      echo -e "${RED}Not logged in to Bitwarden.${NC} Run: bw login"
+      return 1
+      ;;
+    locked)
+      echo -e "${YELLOW}Vault locked. Unlocking...${NC}"
+      BW_SESSION="$("$bw_bin" unlock --raw)"
+      export BW_SESSION
+      ;;
+    unlocked) ;;
+  esac
+
+  list_bw() { "$bw_bin" list items --search "dotfiles" | jq -c '.[] | select(.name != null) | .name |= (sub("^\\s+"; "") | sub("\\s+$"; "")) | select(.name | startswith("dotfiles/"))'; }
+  get_field() { echo "$item" | jq -r "$1 // empty"; }
+
+  safe_write() {
+    local target="$1" content="$2" label="${3:-$1}"
+    if [[ -f "$target" ]] && ! $force; then
+      read -r -p "  Overwrite $label? [y/N] " reply </dev/tty || true
+      case "$reply" in
+        [yY]|[yY]es) ;;
+        *)
+          echo "  Skip   $label"
+          return 1
+          ;;
+      esac
+    fi
+    mkdir -p "$(dirname "$target")"
+    printf '%s\n' "$content" >"$target"
+    echo "  Wrote  $label"
+  }
+
+  local written=0
+  echo -e "${BOLD}${BLUE}==> Provisioning secrets from Bitwarden...${NC}"
+  while IFS= read -r -u 3 item; do
+    [[ -z "$item" ]] && continue
+    local name rel_path priv pub notes
+    name="$(get_field '.name')"
+    rel_path="${name#dotfiles/}"
+    [[ -z "$rel_path" ]] && continue
+
+    priv="$(get_field '.sshKey.privateKey')"
+    pub="$(get_field '.sshKey.publicKey')"
+    notes="$(get_field '.notes')"
+
+    if [[ -n "$priv" || -n "$pub" ]]; then
+      [[ -n "$priv" ]] && safe_write "$HOME/$rel_path" "$priv" "~/$rel_path" && written=$((written + 1))
+      [[ -n "$pub" ]] && safe_write "$HOME/$rel_path.pub" "$pub" "~/$rel_path.pub" && written=$((written + 1))
+    elif [[ -n "$notes" ]]; then
+      safe_write "$HOME/$rel_path" "$notes" "~/$rel_path" && written=$((written + 1))
+    else
+      echo "  Skip   $name (no key fields nor notes)"
+    fi
+  done 3< <(list_bw)
+
+  echo -e "\n${GREEN}${BOLD}✓ Secrets provisioning complete!${NC} ($written file(s) written)"
+}
+
+# ── 5. Command: Stow / Deploy ─────────────────
+cmd_stow() {
+  if [[ ! -f config ]]; then
+    cp config.dist config
+    echo -e "${YELLOW}Created ./config from template (config.dist).${NC}"
+  fi
+
+  # shellcheck source=config.dist
+  . ./config
+
+  local os
+  os="$(detect_os)"
+
+  if ! command -v stow &>/dev/null; then
+    echo -e "${YELLOW}stow not found — installing system package dependencies...${NC}"
+    install_pkg "$os" stow fzf
+  fi
+
+  echo -e "${BOLD}${BLUE}==> Deploying dotfile packages with stow...${NC}"
+  # shellcheck disable=SC2086
+  stow "$@" $TO_DEPLOY
+
+  echo -e "${GREEN}${BOLD}✓ Deployment complete!${NC}\n"
+
+  # Helpful post-run blurbs & reminders
+  echo -e "${BOLD}Tips & Reminders:${NC}"
+  echo -e "  • Package preparation:  Run ${BOLD}./dotfiles prepare${NC} to install system packages for your OS"
+  echo -e "  • Secret provisioning:  Run ${BOLD}./dotfiles secrets${NC} to pull SSH keys & config secrets from Bitwarden"
+  if [[ ! -d "$HOME/scripts" ]]; then
+    echo -e "  • User scripts repo:    Run ${BOLD}git clone git@github.com:staernid/scripts.git ~/scripts${NC}"
+  fi
+}
+
+# ── 6. Main Dispatcher ────────────────────────
+subcommand="${1:-stow}"
+if [ $# -gt 0 ]; then shift; fi
+
+case "$subcommand" in
+  prepare|deps|--prepare|-p)
+    cmd_prepare "$@"
+    ;;
+  secrets|bw|provision-secrets|--secrets|-s)
+    cmd_secrets "$@"
+    ;;
+  stow|deploy|sync)
+    cmd_stow "$@"
+    ;;
+  unstow|revert|-D)
+    cmd_stow -D "$@"
+    ;;
+  help|-h|--help)
+    cmd_help
+    ;;
+  *)
+    if [[ "$subcommand" == -* ]]; then
+      cmd_stow "$subcommand" "$@"
+    else
+      echo -e "${RED}Unknown command:${NC} $subcommand"
+      echo ""
+      cmd_help
+      exit 1
+    fi
+    ;;
+esac

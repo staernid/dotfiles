@@ -1,3 +1,0 @@
-# Packages to stow (space-separated).
-# Available: ai arch editor media secrets shell ssh
-TO_DEPLOY="ai editor media shell ssh"

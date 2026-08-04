@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# change-steamid — Safely replace a SteamID64 in game save files, configs, and directory names
+#
+# Usage:
+#   change-steamid <target_dir> <old_id> <new_id> [--execute|-e] [--no-backup]
+#
+# Examples:
+#   change-steamid ~/Games/umu 76561198000000001 76561198000000002
+#   change-steamid ~/.local/share/GSE\ Saves 76561198000000001 76561198000000002 --execute
+
+set -euo pipefail
+
+# Color helpers
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+EXECUTE=false
+CREATE_BACKUP=true
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -e|--execute) EXECUTE=true; shift ;;
+    --no-backup) CREATE_BACKUP=false; shift ;;
+    -h|--help)
+      echo "Usage: change-steamid <target_dir> <old_steamid64> <new_steamid64> [--execute|-e] [--no-backup]"
+      echo ""
+      echo "Safely scans and replaces a 17-digit SteamID64 in text/binary save files and path names."
+      echo "Runs in DRY-RUN mode by default unless --execute is specified."
+      exit 0
+      ;;
+    *) POSITIONAL+=("$1"); shift ;;
+  esac
+done
+set -- "${POSITIONAL[@]}"
+
+TARGET_DIR="${1:-}"
+OLD_ID="${2:-}"
+NEW_ID="${3:-}"
+
+# Interactive prompts if missing arguments
+if [[ -z "$TARGET_DIR" ]]; then
+  read -rp "Enter target directory [default: $HOME/Games/umu]: " input_dir </dev/tty || true
+  TARGET_DIR="${input_dir:-$HOME/Games/umu}"
+fi
+
+if [[ -z "$OLD_ID" ]]; then
+  read -rp "Enter OLD SteamID64 (17 digits): " OLD_ID </dev/tty || true
+fi
+
+if [[ -z "$NEW_ID" ]]; then
+  read -rp "Enter NEW SteamID64 (17 digits): " NEW_ID </dev/tty || true
+fi
+
+# Expand ~ if present
+TARGET_DIR="${TARGET_DIR/#\~/$HOME}"
+
+if [[ ! -d "$TARGET_DIR" ]]; then
+  echo -e "${RED}Error:${NC} Target directory '$TARGET_DIR' does not exist." >&2
+  exit 1
+fi
+
+# Validate SteamID64 format (17 digits)
+if [[ ! "$OLD_ID" =~ ^[0-9]{17}$ ]]; then
+  echo -e "${RED}Error:${NC} OLD_ID '$OLD_ID' must be a valid 17-digit SteamID64 integer." >&2
+  exit 1
+fi
+
+if [[ ! "$NEW_ID" =~ ^[0-9]{17}$ ]]; then
+  echo -e "${RED}Error:${NC} NEW_ID '$NEW_ID' must be a valid 17-digit SteamID64 integer." >&2
+  exit 1
+fi
+
+if [[ "${#OLD_ID}" -ne "${#NEW_ID}" ]]; then
+  echo -e "${RED}Error:${NC} OLD_ID and NEW_ID must be the exact same character length (17) for binary safety." >&2
+  exit 1
+fi
+
+if [[ "$OLD_ID" == "$NEW_ID" ]]; then
+  echo -e "${YELLOW}Notice:${NC} OLD_ID and NEW_ID are identical ($OLD_ID). Nothing to change."
+  exit 0
+fi
+
+echo -e "${BOLD}${BLUE}==> SteamID Replacement Plan${NC}"
+echo -e "  Target Directory: ${BOLD}$TARGET_DIR${NC}"
+echo -e "  Old SteamID64:    ${YELLOW}$OLD_ID${NC}"
+echo -e "  New SteamID64:    ${GREEN}$NEW_ID${NC}"
+echo -e "  Execution Mode:   $( $EXECUTE && echo -e "${RED}${BOLD}EXECUTE (Modifying files)${NC}" || echo -e "${YELLOW}${BOLD}DRY-RUN (Safe simulation)${NC}" )"
+echo "--------------------------------------------------------"
+
+# 1. Content scan & replacement
+echo -e "${BOLD}[1/2] Scanning file contents...${NC}"
+content_count=0
+while IFS= read -r -d '' file; do
+  if grep -q -a "$OLD_ID" "$file"; then
+    content_count=$((content_count + 1))
+    if [ "$EXECUTE" = true ]; then
+      if [ "$CREATE_BACKUP" = true ]; then
+        cp -a "$file" "$file.bak"
+        echo -e "  ${GREEN}Updated (backed up to .bak):${NC} $file"
+      else
+        echo -e "  ${GREEN}Updated:${NC} $file"
+      fi
+      LC_ALL=C perl -pi -e "s/${OLD_ID}/${NEW_ID}/g" "$file"
+    else
+      echo -e "  ${YELLOW}[DRY-RUN] Would update content in:${NC} $file"
+    fi
+  fi
+done < <(find "$TARGET_DIR" -type f ! -name "*.bak" -print0)
+
+# 2. Path & filename rename (deepest first)
+echo -e "\n${BOLD}[2/2] Scanning filenames and directory names...${NC}"
+rename_count=0
+while IFS= read -r -d '' item; do
+  basename=$(basename "$item")
+  dirname=$(dirname "$item")
+
+  if [[ "$basename" == *"$OLD_ID"* ]]; then
+    rename_count=$((rename_count + 1))
+    new_basename="${basename//$OLD_ID/$NEW_ID}"
+    new_path="$dirname/$new_basename"
+
+    if [ "$EXECUTE" = true ]; then
+      echo -e "  ${GREEN}Renamed:${NC} $item -> $new_path"
+      mv "$item" "$new_path"
+    else
+      echo -e "  ${YELLOW}[DRY-RUN] Would rename:${NC} $item -> $new_path"
+    fi
+  fi
+done < <(find "$TARGET_DIR" -depth -name "*${OLD_ID}*" -print0)
+
+echo "--------------------------------------------------------"
+if [ "$EXECUTE" = true ]; then
+  echo -e "${GREEN}${BOLD}✓ Finished!${NC} Updated $content_count file(s) and renamed $rename_count path(s)."
+else
+  echo -e "${YELLOW}${BOLD}✓ Dry run complete.${NC} Found $content_count file(s) to update and $rename_count path(s) to rename."
+  echo -e "To execute these changes, re-run with: ${BOLD}change-steamid \"$TARGET_DIR\" $OLD_ID $NEW_ID --execute${NC}"
+fi

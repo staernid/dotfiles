@@ -505,6 +505,18 @@ def update_all(skip_prompt: bool = False) -> bool:
     return res
 
 
+def make_asset_pattern(filename: str) -> str:
+    """Convert an asset filename into a version-agnostic regex pattern."""
+    pattern = re.sub(
+        r"(?<![a-zA-Z0-9])v?\d+\.\d+(?:\.\d+)*(?![a-zA-Z0-9])",
+        ".*",
+        filename,
+    )
+    parts = pattern.split(".*")
+    escaped_parts = [re.escape(p) for p in parts]
+    return ".*".join(escaped_parts)
+
+
 def add_app(repo: str) -> bool:
     """Interactive wizard to configure a new GitHub repository."""
     if "/" not in repo:
@@ -537,7 +549,7 @@ def add_app(repo: str) -> bool:
         sys.stderr.write("Invalid selection.\n")
         return False
 
-    def_pat = re.escape(chosen["name"])
+    def_pat = make_asset_pattern(chosen["name"])
     pat = prompt(f"Asset pattern regex [default: {def_pat}]: ", def_pat)
 
     def_name = repo.split("/")[-1]

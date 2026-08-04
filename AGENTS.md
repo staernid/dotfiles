@@ -1,6 +1,6 @@
 # dotfiles
 
-Minimalist dotfiles managed with GNU stow. Usage docs live in the script headers — see `deploy` and `provision-secrets`.
+Minimalist dotfiles managed with GNU stow. Usage docs live in the script header — see `dotfiles`.
 
 ## Layout
 
@@ -8,9 +8,10 @@ Each top-level directory is a stow package: `ai`, `arch`, `editor`, `media`, `se
 
 ## Deployment
 
-- `./prepare.sh` — best-effort dependency installer for Fedora, Arch, Debian, and Termux.
-- `./deploy` — single entry point. Installs stow on first run, stows packages. Pass `-D` to revert.
-- `./provision-secrets` — pulls SSH keys and config secrets from Bitwarden. Pass `-y` to skip prompts.
+- `./dotfiles` — single entry point CLI for managing dotfiles:
+  - `./dotfiles` — stows packages (default). Installs stow on first run. Pass `-D` to revert.
+  - `./dotfiles prepare` — best-effort dependency installer for Fedora, Arch, Debian, and Termux.
+  - `./dotfiles secrets` — pulls SSH keys and secrets from Bitwarden. Pass `-y` to skip prompts.
 - `./.config` sets `TO_DEPLOY` (which packages to stow). Gitignored; `./config.dist` is the template.
 - Scripts live at `$HOME/scripts` (cloned separately); added to `PATH` via shell profile.
 

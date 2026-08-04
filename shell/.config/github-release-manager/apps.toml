@@ -1,25 +1,19 @@
 # github-release-manager configuration file
-#
-# [example-app]
-# repo = "owner/repo"
-# pattern = '.*\\.tar\\.gz$'  # Optional asset regex
-# bin = "example"             # Optional binary name inside archive
-# gui = true                  # Optional: Create desktop launcher
 
 [prismlauncher]
 repo = "PrismLauncher/PrismLauncher"
-pattern = '\.AppImage$'
+pattern = "\.AppImage$"
 name = "prismlauncher"
 gui = true
 
 [godot]
 repo = "godotengine/godot"
-pattern = 'Godot_v.*_linux'
+pattern = "Godot_v.*_linux"
 gui = true
 
 [bw]
 repo = "bitwarden/clients"
-pattern = '^bw-linux.*\.zip$'
+pattern = "^bw-linux.*\.zip$"
 bin = "bw"
 
 [steamless]
@@ -27,3 +21,9 @@ repo = "staernid/steamless-rs"
 
 [gamux]
 repo = "staernid/gamux"
+
+[ludusavi]
+repo = "mtkennerly/ludusavi"
+pattern = "ludusavi\-.*\-linux\.tar\.gz"
+gui = true
+

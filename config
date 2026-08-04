@@ -1,4 +1,3 @@
 #!/bin/sh
 
-TO_DEPLOY="ai editor media shell ssh"
-SWAY_THEME=dark
+TO_DEPLOY="ai editor gaming media shell ssh"
