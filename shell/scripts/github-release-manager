@@ -55,6 +55,7 @@ NON_BIN_EXTS = {
     ".xml",
     ".dmg",
     ".pkg",
+    ".apk",
 }
 
 DEFAULT_CONFIG_TEMPLATE = """# github-release-manager configuration file
@@ -131,7 +132,7 @@ def gh_api(url: str) -> Any:
         return None
 
 
-def detect_sys():
+def detect_sys() -> tuple[str, str, str, str]:
     """Detect OS, Arch, and regex search patterns."""
     machine = platform.machine().lower()
     arch = ARCH_MAP.get(machine, machine)
@@ -139,7 +140,7 @@ def detect_sys():
     if "darwin" in sys_name:
         os_pat = r"(darwin|mac|macos|osx|apple)"
     else:
-        os_pat = r"(linux|ubuntu|debian)"
+        os_pat = r"(linux|ubuntu|debian|android|termux)"
     return sys_name, os_pat, arch, ARCH_PAT.get(arch, arch)
 
 
@@ -152,13 +153,76 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def find_asset(repo, pattern="", tag="latest"):
-    """Find release download URL, SHA-256 digest, and asset filename."""
-    tag_path = "latest" if tag == "latest" else f"tags/{tag}"
-    url = f"https://api.github.com/repos/{repo}/releases/{tag_path}"
-    data = gh_api(url)
+def has_matching_asset(assets: list[dict[str, Any]], pattern: str = "") -> bool:
+    """Check if any asset matches the system architecture/OS and optional pattern."""
+    if not assets:
+        return False
+    _, os_pat, _, arch_pat = detect_sys()
+    filtered = [
+        a
+        for a in assets
+        if pattern or Path(a["name"]).suffix.lower() not in NON_BIN_EXTS
+    ]
+
+    def match(name: str, pat: str) -> bool:
+        return bool(re.search(pat, name, re.IGNORECASE)) if pat else True
+
+    cands = [
+        a
+        for a in filtered
+        if match(a["name"], pattern)
+        and match(a["name"], arch_pat)
+        and match(a["name"], os_pat)
+    ]
+    if not cands:
+        cands = [
+            a
+            for a in filtered
+            if match(a["name"], pattern) and match(a["name"], arch_pat)
+        ]
+    if not cands and pattern:
+        cands = [a for a in filtered if match(a["name"], pattern)]
+    return bool(cands)
+
+
+def get_release(
+    repo: str, pattern: str = "", tag: str = "latest"
+) -> dict[str, Any] | None:
+    """Get GitHub release dict matching tag or newest release containing matching assets."""
+    if tag != "latest":
+        url = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+        rel = gh_api(url)
+        return rel if isinstance(rel, dict) and "assets" in rel else None
+
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    rel = gh_api(url)
+    if (
+        isinstance(rel, dict)
+        and "assets" in rel
+        and has_matching_asset(rel["assets"], pattern)
+    ):
+        return rel
+
+    url = f"https://api.github.com/repos/{repo}/releases"
+    releases = gh_api(url)
+    if isinstance(releases, list):
+        for r in releases:
+            if (
+                isinstance(r, dict)
+                and "assets" in r
+                and has_matching_asset(r["assets"], pattern)
+            ):
+                return r
+    return rel if isinstance(rel, dict) else None
+
+
+def find_asset(
+    repo: str, pattern: str = "", tag: str = "latest"
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Find release download URL, SHA-256 digest, asset filename, and tag name."""
+    data = get_release(repo, pattern, tag)
     if not data or "assets" not in data:
-        return None, None, None
+        return None, None, None, None
 
     _, os_pat, _, arch_pat = detect_sys()
     assets = [
@@ -167,7 +231,7 @@ def find_asset(repo, pattern="", tag="latest"):
         if pattern or Path(a["name"]).suffix.lower() not in NON_BIN_EXTS
     ]
 
-    def match(name, pat):
+    def match(name: str, pat: str) -> bool:
         return bool(re.search(pat, name, re.IGNORECASE)) if pat else True
 
     cands = [
@@ -186,13 +250,18 @@ def find_asset(repo, pattern="", tag="latest"):
     if not cands:
         cands = [a for a in assets if match(a["name"], pattern)]
     if not cands:
-        return None, None, None
+        return None, None, None, data.get("tag_name")
 
     chosen = cands[0]
     digest = chosen.get("digest", "")
     if digest.startswith("sha256:"):
         digest = digest[7:].lower()
-    return chosen["browser_download_url"], digest, chosen["name"]
+    return (
+        chosen["browser_download_url"],
+        digest,
+        chosen["name"],
+        data.get("tag_name"),
+    )
 
 
 def download(url, dest_path, expected_sha256=""):
@@ -302,24 +371,22 @@ def create_desktop_entry(app_name, binary_path, is_gui=False, icon=""):
 
 
 def install_app(
-    repo,
-    pattern="",
-    bin_name="",
-    name="",
-    dir="~/.local/bin",
-    tag="latest",
-    force=False,
-    gui=False,
-    icon="",
-):
+    repo: str,
+    pattern: str = "",
+    bin_name: str = "",
+    name: str = "",
+    dir: str = "~/.local/bin",
+    tag: str = "latest",
+    force: bool = False,
+    gui: bool = False,
+    icon: str = "",
+) -> bool:
     """Install application into isolated storage and update atomic symlink."""
     app_name = name or bin_name or repo.split("/")[-1]
     target_dir = Path(dir).expanduser()
     symlink_path = target_dir / app_name
 
-    tag_path = "latest" if tag == "latest" else f"tags/{tag}"
-    rel = gh_api(f"https://api.github.com/repos/{repo}/releases/{tag_path}")
-    cur_tag = rel.get("tag_name") if rel else None
+    url, digest, asset_name, cur_tag = find_asset(repo, pattern, tag)
     if not cur_tag:
         if symlink_path.exists():
             return True
@@ -338,8 +405,7 @@ def install_app(
         sys.stderr.write(f"{app_name} is up-to-date ({cur_tag}).\n")
         return True
 
-    url, digest, asset_name = find_asset(repo, pattern, tag)
-    if not url:
+    if not url or not asset_name:
         sys.stderr.write(f"Error: No asset match for {repo} ({cur_tag})\n")
         return False
 
@@ -433,7 +499,7 @@ def save_cfg(cfg: dict[str, dict[str, Any]]) -> None:
     CONFIG_FILE.write_text("\n".join(lines) + "\n")
 
 
-def get_app_status(app_name, v):
+def get_app_status(app_name: str, v: dict[str, Any]) -> tuple[str, str, str, str, str]:
     """Check installed vs latest version for an app."""
     target = Path(v.get("dir", "~/.local/bin")).expanduser()
     symlink = target / (v.get("name") or app_name)
@@ -444,7 +510,9 @@ def get_app_status(app_name, v):
     else:
         installed = "Not Installed"
 
-    rel = gh_api(f"https://api.github.com/repos/{v['repo']}/releases/latest")
+    rel = get_release(
+        v["repo"], pattern=v.get("pattern", ""), tag=v.get("tag", "latest")
+    )
     latest = rel.get("tag_name", "Error") if rel else "Error"
 
     if installed == "Not Installed":
