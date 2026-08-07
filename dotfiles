@@ -31,15 +31,18 @@ detect_os() {
   elif [ -f /etc/os-release ]; then
     . /etc/os-release
     case "${ID:-}" in
-      fedora) echo "fedora" ;;
-      arch|manjaro|endeavouros) echo "arch" ;;
-      debian|ubuntu|pop|mint) echo "debian" ;;
-      *)
-        if [[ "${ID_LIKE:-}" =~ fedora ]]; then echo "fedora";
-        elif [[ "${ID_LIKE:-}" =~ arch ]]; then echo "arch";
-        elif [[ "${ID_LIKE:-}" =~ debian ]]; then echo "debian";
-        else echo "unknown"; fi
-        ;;
+    fedora) echo "fedora" ;;
+    arch | manjaro | endeavouros) echo "arch" ;;
+    debian | ubuntu | pop | mint) echo "debian" ;;
+    *)
+      if [[ "${ID_LIKE:-}" =~ fedora ]]; then
+        echo "fedora"
+      elif [[ "${ID_LIKE:-}" =~ arch ]]; then
+        echo "arch"
+      elif [[ "${ID_LIKE:-}" =~ debian ]]; then
+        echo "debian"
+      else echo "unknown"; fi
+      ;;
     esac
   else
     echo "unknown"
@@ -50,20 +53,20 @@ install_pkg() {
   local os="$1"
   shift
   case "$os" in
-    termux) pkg install -y "$@" ;;
-    arch) sudo pacman -S --needed --noconfirm "$@" ;;
-    fedora)
-      if command -v dnf5 &>/dev/null; then
-        sudo dnf5 install -y "$@"
-      else
-        sudo dnf install -y "$@"
-      fi
-      ;;
-    debian) sudo apt-get update -qq && sudo apt-get install -y "$@" ;;
-    *)
-      echo -e "${YELLOW}Unknown OS — please install manually: $*${NC}"
-      return 1
-      ;;
+  termux) pkg install -y "$@" ;;
+  arch) sudo pacman -S --needed --noconfirm "$@" ;;
+  fedora)
+    if command -v dnf5 &>/dev/null; then
+      sudo dnf5 install -y "$@"
+    else
+      sudo dnf install -y "$@"
+    fi
+    ;;
+  debian) sudo apt-get update -qq && sudo apt-get install -y "$@" ;;
+  *)
+    echo -e "${YELLOW}Unknown OS — please install manually: $*${NC}"
+    return 1
+    ;;
   esac
 }
 
@@ -100,13 +103,13 @@ cmd_prepare() {
 
   for arg in "$@"; do
     case "$arg" in
-      -n|--dry-run) dry_run=true ;;
-      -y|--yes) auto_yes=true ;;
-      --cli-only) cli_only=true ;;
-      -h|--help)
-        echo "Usage: ./dotfiles prepare [-n|--dry-run] [-y|--yes] [--cli-only]"
-        return 0
-        ;;
+    -n | --dry-run) dry_run=true ;;
+    -y | --yes) auto_yes=true ;;
+    --cli-only) cli_only=true ;;
+    -h | --help)
+      echo "Usage: ./dotfiles prepare [-n|--dry-run] [-y|--yes] [--cli-only]"
+      return 0
+      ;;
     esac
   done
 
@@ -132,7 +135,7 @@ cmd_prepare() {
   local debian_dev="gh tmux syncthing unzip shellcheck git-delta entr hyperfine trash-cli build-essential"
   local debian_gui="firefox mpv zathura zathura-pdf-poppler wl-clipboard scrcpy atool imagemagick poppler-utils"
 
-  local termux_cli="git zsh neovim stow fzf zoxide direnv ripgrep fd btop fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv tmux unzip"
+  local termux_cli="git zsh neovim stow fzf zoxide direnv ripgrep fd fastfetch yt-dlp jq tree lsof aria2 rclone croc duf pv tmux unzip"
 
   run_inst() {
     local c="$1"
@@ -145,43 +148,43 @@ cmd_prepare() {
   }
 
   case "$os" in
-    fedora)
-      local pkg_cmd
-      if command -v dnf5 &>/dev/null; then pkg_cmd="sudo dnf5 install -y"; else pkg_cmd="sudo dnf install -y"; fi
-      local pkgs="$fedora_cli $fedora_dev"
-      [ "$cli_only" = false ] && pkgs="$pkgs $fedora_gui"
-      run_inst "$pkg_cmd $pkgs"
+  fedora)
+    local pkg_cmd
+    if command -v dnf5 &>/dev/null; then pkg_cmd="sudo dnf5 install -y"; else pkg_cmd="sudo dnf install -y"; fi
+    local pkgs="$fedora_cli $fedora_dev"
+    [ "$cli_only" = false ] && pkgs="$pkgs $fedora_gui"
+    run_inst "$pkg_cmd $pkgs"
 
-      if [ "$cli_only" = false ]; then
-        local inst_gaming=false
-        if [ "$auto_yes" = true ]; then
-          inst_gaming=true
-        else
-          echo -e "\n${BOLD}${YELLOW}Would you like to install Fedora gaming packages? (${fedora_gaming})${NC}"
-          read -rp "Install gaming packages? [y/N]: " resp </dev/tty || true
-          case "$resp" in [yY][eE][sS]|[yY]) inst_gaming=true ;; esac
-        fi
-        [ "$inst_gaming" = true ] && run_inst "$pkg_cmd $fedora_gaming"
+    if [ "$cli_only" = false ]; then
+      local inst_gaming=false
+      if [ "$auto_yes" = true ]; then
+        inst_gaming=true
+      else
+        echo -e "\n${BOLD}${YELLOW}Would you like to install Fedora gaming packages? (${fedora_gaming})${NC}"
+        read -rp "Install gaming packages? [y/N]: " resp </dev/tty || true
+        case "$resp" in [yY][eE][sS] | [yY]) inst_gaming=true ;; esac
       fi
-      ;;
-    arch)
-      local pkgs="$arch_cli $arch_dev"
-      [ "$cli_only" = false ] && pkgs="$pkgs $arch_gui"
-      run_inst "sudo pacman -S --needed --noconfirm $pkgs"
-      ;;
-    debian)
-      run_inst "sudo apt update"
-      local pkgs="$debian_cli $debian_dev"
-      [ "$cli_only" = false ] && pkgs="$pkgs $debian_gui"
-      run_inst "sudo apt install -y $pkgs"
-      ;;
-    termux)
-      run_inst "pkg install -y $termux_cli"
-      ;;
-    *)
-      echo -e "${RED}Unsupported OS. Please install dependencies manually.${NC}"
-      return 1
-      ;;
+      [ "$inst_gaming" = true ] && run_inst "$pkg_cmd $fedora_gaming"
+    fi
+    ;;
+  arch)
+    local pkgs="$arch_cli $arch_dev"
+    [ "$cli_only" = false ] && pkgs="$pkgs $arch_gui"
+    run_inst "sudo pacman -S --needed --noconfirm $pkgs"
+    ;;
+  debian)
+    run_inst "sudo apt update"
+    local pkgs="$debian_cli $debian_dev"
+    [ "$cli_only" = false ] && pkgs="$pkgs $debian_gui"
+    run_inst "sudo apt install -y $pkgs"
+    ;;
+  termux)
+    run_inst "pkg install -y $termux_cli"
+    ;;
+  *)
+    echo -e "${RED}Unsupported OS. Please install dependencies manually.${NC}"
+    return 1
+    ;;
   esac
 
   echo -e "\n${GREEN}${BOLD}✓ System preparation complete!${NC}"
@@ -199,11 +202,11 @@ cmd_secrets() {
 
   for arg in "$@"; do
     case "$arg" in
-      -y|--force) force=true ;;
-      -h|--help)
-        echo "Usage: ./dotfiles secrets [-y|--force]"
-        return 0
-        ;;
+    -y | --force) force=true ;;
+    -h | --help)
+      echo "Usage: ./dotfiles secrets [-y|--force]"
+      return 0
+      ;;
     esac
   done
 
@@ -231,16 +234,16 @@ cmd_secrets() {
   bw_status="$("$bw_bin" status | jq -r '.status')"
 
   case "$bw_status" in
-    unauthenticated)
-      echo -e "${RED}Not logged in to Bitwarden.${NC} Run: bw login"
-      return 1
-      ;;
-    locked)
-      echo -e "${YELLOW}Vault locked. Unlocking...${NC}"
-      BW_SESSION="$("$bw_bin" unlock --raw)"
-      export BW_SESSION
-      ;;
-    unlocked) ;;
+  unauthenticated)
+    echo -e "${RED}Not logged in to Bitwarden.${NC} Run: bw login"
+    return 1
+    ;;
+  locked)
+    echo -e "${YELLOW}Vault locked. Unlocking...${NC}"
+    BW_SESSION="$("$bw_bin" unlock --raw)"
+    export BW_SESSION
+    ;;
+  unlocked) ;;
   esac
 
   list_bw() { "$bw_bin" list items --search "dotfiles" | jq -c '.[] | select(.name != null) | .name |= (sub("^\\s+"; "") | sub("\\s+$"; "")) | select(.name | startswith("dotfiles/"))'; }
@@ -251,11 +254,11 @@ cmd_secrets() {
     if [[ -f "$target" ]] && ! $force; then
       read -r -p "  Overwrite $label? [y/N] " reply </dev/tty || true
       case "$reply" in
-        [yY]|[yY]es) ;;
-        *)
-          echo "  Skip   $label"
-          return 1
-          ;;
+      [yY] | [yY]es) ;;
+      *)
+        echo "  Skip   $label"
+        return 1
+        ;;
       esac
     fi
     mkdir -p "$(dirname "$target")"
@@ -327,29 +330,29 @@ subcommand="${1:-stow}"
 if [ $# -gt 0 ]; then shift; fi
 
 case "$subcommand" in
-  prepare|deps|--prepare|-p)
-    cmd_prepare "$@"
-    ;;
-  secrets|bw|provision-secrets|--secrets|-s)
-    cmd_secrets "$@"
-    ;;
-  stow|deploy|sync)
-    cmd_stow "$@"
-    ;;
-  unstow|revert|-D)
-    cmd_stow -D "$@"
-    ;;
-  help|-h|--help)
+prepare | deps | --prepare | -p)
+  cmd_prepare "$@"
+  ;;
+secrets | bw | provision-secrets | --secrets | -s)
+  cmd_secrets "$@"
+  ;;
+stow | deploy | sync)
+  cmd_stow "$@"
+  ;;
+unstow | revert | -D)
+  cmd_stow -D "$@"
+  ;;
+help | -h | --help)
+  cmd_help
+  ;;
+*)
+  if [[ "$subcommand" == -* ]]; then
+    cmd_stow "$subcommand" "$@"
+  else
+    echo -e "${RED}Unknown command:${NC} $subcommand"
+    echo ""
     cmd_help
-    ;;
-  *)
-    if [[ "$subcommand" == -* ]]; then
-      cmd_stow "$subcommand" "$@"
-    else
-      echo -e "${RED}Unknown command:${NC} $subcommand"
-      echo ""
-      cmd_help
-      exit 1
-    fi
-    ;;
+    exit 1
+  fi
+  ;;
 esac
